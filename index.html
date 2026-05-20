@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="./public/assets/icon.png">
+    <title>MapMogged - Google Maps Timeline Viewer</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="map" aria-label="MapMogged"></div>
+
+    <aside class="control-panel" aria-label="Timeline controls">
+      <div class="brand-row">
+        <h1>MapMogged</h1>
+        <div class="brand-actions">
+          <button
+            id="helpButton"
+            class="minimize-button panel-icon-button"
+            type="button"
+            aria-label="Open instructions"
+            title="Open instructions"
+          ></button>
+          <button
+            id="minimizeButton"
+            class="minimize-button panel-icon-button"
+            type="button"
+            aria-label="Minimize controls"
+            title="Minimize controls"
+          ></button>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button
+          id="uploadButton"
+          class="upload-button"
+          type="button"
+          aria-label="Upload Maps Timeline JSON and manual CSV"
+          title="Upload Maps Timeline JSON and manual CSV"
+        >
+          <span id="fileLabel">Upload</span>
+        </button>
+        <input
+          id="timelineFile"
+          class="file-input"
+          type="file"
+          accept=".json,.csv,application/json,text/csv"
+          multiple
+        />
+
+        <div class="process-split" role="group" aria-label="Process upload">
+          <button id="processButton" class="process-main" type="button" disabled>Process</button>
+          <button
+            id="settingsToggleButton"
+            class="process-advanced"
+            type="button"
+            aria-label="Advanced settings"
+            aria-expanded="false"
+            aria-controls="settingsPanel"
+            title="Advanced settings"
+          >
+            <span class="process-caret" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+
+      <section id="settingsPanel" class="processing-settings" hidden>
+        <div class="layer-controls defaults-controls">
+          <div class="layer-span-6">
+            <span>Mode</span>
+            <div class="segmented-control layer-segmented-control">
+              <label>
+                <input type="radio" name="mapMode" value="points" checked />
+                <span>Points</span>
+              </label>
+              <label>
+                <input type="radio" name="mapMode" value="route" />
+                <span>Route</span>
+              </label>
+            </div>
+          </div>
+          <div class="layer-span-3 color-control">
+            <span>Color</span>
+            <div class="color-input-row">
+              <input id="layerColor" type="color" value="#2563eb" aria-label="Default layer color" />
+              <div class="color-presets" data-color-presets></div>
+            </div>
+          </div>
+          <label class="layer-span-3">
+            <span>Width</span>
+            <input id="styleSize" type="number" min="1" max="12" step="0.5" value="2.5" />
+          </label>
+          <label class="layer-span-4">
+            <span>Precision</span>
+            <input id="roundDigits" type="number" min="1" max="7" step="1" value="4" />
+          </label>
+          <label class="layer-span-4">
+            <span>Min speed</span>
+            <input id="minSpeed" type="number" min="0" step="0.1" value="0.5" />
+          </label>
+          <label class="layer-span-4">
+            <span>Max speed</span>
+            <input id="maxSpeed" type="number" min="1" step="10" value="500" />
+          </label>
+        </div>
+      </section>
+
+      <div id="layerSection" class="layer-section" hidden>
+        <div class="layer-section-header">
+          <span>Layers</span>
+          <button
+            id="clearLayersButton"
+            class="panel-icon-button"
+            type="button"
+            aria-label="Clear all layers"
+            title="Clear all layers"
+            disabled
+          ></button>
+        </div>
+        <div id="layerList" class="layer-list"></div>
+      </div>
+    </aside>
+
+    <button id="restoreButton" class="restore-control" type="button" aria-label="Open timeline controls">
+      <span class="restore-hex"></span>
+    </button>
+
+    <div id="instructionsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="instructionsTitle" hidden>
+      <div class="instructions-modal">
+        <div class="modal-header">
+          <h2 id="instructionsTitle">Instructions</h2>
+          <button
+            id="closeInstructionsButton"
+            class="minimize-button panel-icon-button"
+            type="button"
+            aria-label="Close instructions"
+            title="Close instructions"
+          ></button>
+        </div>
+        <ul>
+          <li>Click Upload and choose one or more Google Timeline JSON files and/or manual CSV files</li>
+          <li>Each will interpretted as its own layer, so overlapping dates may exist</li>
+          <li>All processing is done locally on your computer - no information entered is communicated back to the server</li>
+          <li>You do not need to change the Google JSON file before uploading</li>
+        </ul>
+        <br>
+        <ul>
+          <li>Manual CSV files should include columns named lat, long, and time</li>  
+          <li>Times are treated as UTC. Expected values for lat/long are decimals, and time is <wbr><span style="white-space: nowrap;">YYYY-MM-DDThh:mm:ssZ</span></li>
+        </ul>
+        <br>
+        <ul>  
+          <li>Once files are added, click Process</li>
+          <li>You may adjust the processing settings by clicking the the split</li>
+          <li>You can also reprocess a layer and adjust the settings after uploading</li>
+        </ul>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
