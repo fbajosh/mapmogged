@@ -10,6 +10,15 @@
   --route: #dc2626;
   --point: #1d4ed8;
   --shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+  --globe-space: #07111f;
+  --globe-ocean-highlight: #f8fafc;
+  --globe-ocean-shallow: #dbeafe;
+  --globe-ocean-mid: #7dd3fc;
+  --globe-ocean-deep: #0f4c81;
+  --globe-land: #c8d1c2;
+  --globe-border: rgba(255, 255, 255, 0.78);
+  --globe-graticule: rgba(15, 23, 42, 0.16);
+  --globe-outline: rgba(15, 23, 42, 0.42);
   font-family:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 }
@@ -43,6 +52,10 @@ button {
 button:disabled {
   cursor: not-allowed;
   opacity: 0.56;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 #map {
@@ -88,24 +101,99 @@ button:disabled {
   bottom: 18px;
   z-index: 5;
   display: grid;
+  gap: 8px;
+}
+
+.map-control-group,
+.map-settings-button {
   overflow: hidden;
   border: 1px solid var(--line);
   background: var(--panel-solid);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.14);
 }
 
+.map-control-group {
+  display: grid;
+}
+
 .map-controls button {
   width: 36px;
   height: 34px;
-  border-bottom: 1px solid var(--line);
   background: #fff;
   color: var(--ink);
-  font-size: 19px;
   line-height: 1;
 }
 
-.map-controls button:last-child {
+.map-control-group button {
+  border-bottom: 1px solid var(--line);
+  font-size: 19px;
+}
+
+.map-control-group button:last-child {
   border-bottom: 0;
+}
+
+.map-layer-settings {
+  position: relative;
+}
+
+.map-settings-button {
+  display: grid;
+  place-items: center;
+}
+
+.map-controls .map-settings-button {
+  width: 38px;
+}
+
+.map-settings-button[aria-expanded="true"] {
+  color: var(--accent);
+}
+
+.map-settings-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.map-settings-popover {
+  position: absolute;
+  bottom: 0;
+  left: 44px;
+  width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  padding: 8px;
+}
+
+.map-settings-title {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.map-settings-title-secondary {
+  margin-top: 10px;
+}
+
+.map-settings-option {
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 4px;
+  padding: 8px 9px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.map-settings-option:hover,
+.map-settings-option.is-selected {
+  background: #eef4ff;
+  color: var(--accent-strong);
 }
 
 .map-attribution {
@@ -275,14 +363,12 @@ body.is-panel-collapsed .map-controls {
 
 .top-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
   margin-top: 14px;
 }
 
-.upload-button,
-.process-main,
-.process-advanced {
+.upload-button {
   min-height: 42px;
   font-weight: 650;
 }
@@ -304,50 +390,6 @@ body.is-panel-collapsed .map-controls {
 
 .file-input {
   display: none;
-}
-
-.process-split {
-  --process-bg: var(--accent);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
-  overflow: hidden;
-  border-radius: 6px;
-}
-
-.process-main,
-.process-advanced {
-  background: var(--process-bg);
-  color: #fff;
-}
-
-.process-split:has(.process-main:not(:disabled)):hover {
-  --process-bg: var(--accent-strong);
-}
-
-.process-split:has(.process-main:disabled) {
-  opacity: 0.56;
-}
-
-.process-main:disabled {
-  opacity: 1;
-}
-
-.process-advanced {
-  display: grid;
-  place-items: center;
-  border-left: 1px solid rgba(255, 255, 255, 0.34);
-}
-
-.process-caret {
-  width: 0;
-  height: 0;
-  border-right: 4px solid transparent;
-  border-left: 4px solid transparent;
-  border-top: 5px solid currentColor;
-}
-
-.process-advanced[aria-expanded="true"] .process-caret {
-  transform: rotate(180deg);
 }
 
 .segmented-control {
@@ -381,23 +423,7 @@ body.is-panel-collapsed .map-controls {
   color: #fff;
 }
 
-.processing-settings {
-  margin-top: 12px;
-}
-
-.settings-panel-title {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.processing-settings .defaults-controls {
-  margin-top: 10px;
-}
-
-.layer-controls input[type="number"],
-.layer-controls input[type="color"] {
+.layer-controls input[type="number"] {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -406,34 +432,45 @@ body.is-panel-collapsed .map-controls {
   color: var(--ink);
 }
 
-.layer-controls input[type="color"] {
-  height: 38px;
-  padding: 4px;
-}
 
 .color-input-row {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 6px;
-  align-items: center;
+  position: relative;
 }
 
-.color-input-row input[type="color"] {
-  width: 38px;
+.color-picker-input {
+  position: absolute;
+  width: 1px !important;
+  height: 1px !important;
+  border: 0 !important;
+  padding: 0 !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .color-presets {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
 }
 
 .color-preset {
+  display: grid;
   width: 100%;
-  height: 16px;
-  border: 1px solid rgba(15, 23, 42, 0.16);
+  height: 17px;
+  place-items: center;
+  border: 1px solid rgba(15, 23, 42, 0.28);
   border-radius: 4px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.color-preset-custom {
+  background: #fff;
+}
+
+.color-preset-custom svg {
+  width: 13px;
+  height: 13px;
+  color: rgba(15, 23, 42, 0.28);
 }
 
 .color-preset.is-selected {
@@ -460,10 +497,6 @@ body.is-panel-collapsed .map-controls {
   text-transform: none;
 }
 
-.process-main {
-  padding: 11px 14px;
-}
-
 .layer-section {
   margin-top: 14px;
   border-top: 1px solid var(--line);
@@ -478,6 +511,12 @@ body.is-panel-collapsed .map-controls {
   font-size: 11px;
   font-weight: 650;
   text-transform: uppercase;
+}
+
+.layer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .layer-section-header button,

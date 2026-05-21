@@ -8,19 +8,64 @@ const SAMPLE_CENTER_LIMIT = 10000;
 const ZOOM_BUTTON_STEP = 0.5;
 const WHEEL_ZOOM_SENSITIVITY = 0.003;
 const MAX_LATITUDE = 85.05112878;
+const GLOBE_MIN_ZOOM = 2;
+const GLOBE_MAX_ZOOM = 7;
+const GLOBE_BASE_RADIUS_RATIO = 0.38;
+const GLOBE_ZOOM_SCALE = 1.55;
+const GLOBE_BASEMAP_SOURCE = "./public/assets/worldHigh.svg";
+const GLOBE_SOURCE_TEXTURE_WIDTH = 4096;
+const GLOBE_RENDER_PIXEL_RATIO_CAP = 2;
+const WORLD_HIGH_VIEWBOX = { x: -2, y: 17.68, width: 964, height: 924.64 };
+const WORLD_HIGH_MERCATOR_SIZE = 960;
+const WORLD_HIGH_LAT_LIMIT = 84.3718418170537;
+const GLOBE_THEME_FALLBACKS = {
+  space: "#07111f",
+  oceanHighlight: "#f8fafc",
+  oceanShallow: "#dbeafe",
+  oceanMid: "#7dd3fc",
+  oceanDeep: "#0f4c81",
+  land: "#c8d1c2",
+  border: "rgba(255, 255, 255, 0.78)",
+  graticule: "rgba(15, 23, 42, 0.16)",
+  outline: "rgba(15, 23, 42, 0.42)",
+};
 const UPLOAD_BUTTON_LABEL = "Upload";
 const UPLOAD_BUTTON_TITLE = "Upload Maps Timeline JSON and manual CSV";
-const PRESET_COLORS = [
-  "#2563eb",
-  "#5e25eb",
-  "#d525eb",
-  "#eb258b",
-  "#eb3625",
-  "#ebad25",
-  "#b2eb25",
-  "#3beb25",
-  "#25eb85",
-  "#25daeb",
+const BASE_COLOR_HUES = [221.21212121212122, 141.21212121212122, 1.21212121212122];
+const BASE_COLOR_SATURATION = 0.8319327731092435;
+const BASE_COLOR_LIGHTNESS = 0.5333333333333333;
+const BASE_LAYER_COLORS = ["#2563eb", "#25eb6b", "#eb2925"];
+const MAP_STYLES = [
+  {
+    id: "standard",
+    label: "Standard",
+    background: "#dbe3ee",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    tileUrl: ({ z, x, y }) => "https://tile.openstreetmap.org/" + z + "/" + x + "/" + y + ".png",
+  },
+  {
+    id: "light",
+    label: "Light",
+    background: "#f1f5f9",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    tileUrl: ({ z, x, y }) => "https://a.basemaps.cartocdn.com/light_all/" + z + "/" + x + "/" + y + ".png",
+  },
+  {
+    id: "dark",
+    label: "Dark",
+    background: "#111827",
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    tileUrl: ({ z, x, y }) => "https://a.basemaps.cartocdn.com/dark_all/" + z + "/" + x + "/" + y + ".png",
+  },
+  {
+    id: "blank",
+    label: "Blank",
+    background: "#eef1f5",
+    attribution: "",
+    tileUrl: null,
+  },
 ];
 // Exact paths from @vscode/codicons src/icons/*.svg.
 const CODICON_PATHS = {
@@ -46,17 +91,14 @@ const CODICON_PATHS = {
       d: "M8.70701 8.00001L12.353 4.35401C12.548 4.15901 12.548 3.84201 12.353 3.64701C12.158 3.45201 11.841 3.45201 11.646 3.64701L8.00001 7.29301L4.35401 3.64701C4.15901 3.45201 3.84201 3.45201 3.64701 3.64701C3.45201 3.84201 3.45201 4.15901 3.64701 4.35401L7.29301 8.00001L3.64701 11.646C3.45201 11.841 3.45201 12.158 3.64701 12.353C3.74501 12.451 3.87301 12.499 4.00101 12.499C4.12901 12.499 4.25701 12.45 4.35501 12.353L8.00101 8.70701L11.647 12.353C11.745 12.451 11.873 12.499 12.001 12.499C12.129 12.499 12.257 12.45 12.355 12.353C12.55 12.158 12.55 11.841 12.355 11.646L8.70901 8.00001H8.70701Z",
     },
   ],
-  collapseAll: [
+  add: [
     {
-      d: "M14 4.27051C14.5999 4.62053 15 5.26009 15 6V11C15 13.21 13.21 15 11 15H6C5.26009 15 4.62053 14.5999 4.27051 14H11C12.65 14 14 12.65 14 11V4.27051Z",
+      d: "M8 1.5C8 1.22386 7.77614 1 7.5 1C7.22386 1 7 1.22386 7 1.5V7H1.5C1.22386 7 1 7.22386 1 7.5C1 7.77614 1.22386 8 1.5 8H7V13.5C7 13.7761 7.22386 14 7.5 14C7.77614 14 8 13.7761 8 13.5V8H13.5C13.7761 8 14 7.77614 14 7.5C14 7.22386 13.7761 7 13.5 7H8V1.5Z",
     },
+  ],
+  eyeClosed: [
     {
-      d: "M9.5 7C9.776 7 10 7.224 10 7.5C10 7.776 9.776 8 9.5 8H5.5C5.224 8 5 7.776 5 7.5C5 7.224 5.224 7 5.5 7H9.5Z",
-    },
-    {
-      d: "M11 2C12.103 2 13 2.897 13 4V11C13 12.103 12.103 13 11 13H4C2.897 13 2 12.103 2 11V4C2 2.897 2.897 2 4 2H11ZM4 3C3.449 3 3 3.449 3 4V11C3 11.552 3.449 12 4 12H11C11.551 12 12 11.552 12 11V4C12 3.449 11.551 3 11 3H4Z",
-      fillRule: "evenodd",
-      clipRule: "evenodd",
+      d: "M10.1196 10.8267L14.1464 14.8536C14.3417 15.0488 14.6583 15.0488 14.8536 14.8536C15.0488 14.6583 15.0488 14.3417 14.8536 14.1464L1.85355 1.14645C1.65829 0.951184 1.34171 0.951184 1.14645 1.14645C0.951184 1.34171 0.951184 1.65829 1.14645 1.85355L4.37624 5.08334C3.90117 5.4183 3.5126 5.80026 3.19877 6.18295C2.75443 6.72477 2.46154 7.26493 2.27931 7.66977C2.18795 7.87274 2.12369 8.04329 2.08166 8.1653C2.06063 8.22636 2.03453 8.31047 2.03453 8.31047L2.01687 8.37186C2.01687 8.37186 1.94098 8.86907 2.37202 8.9833C2.63879 9.05404 2.91251 8.8948 2.98346 8.62815L2.98444 8.62471L2.99179 8.5997C2.9989 8.57616 3.01051 8.53927 3.02715 8.49095C3.06047 8.39421 3.11375 8.25227 3.19119 8.08023C3.34655 7.73507 3.59627 7.27523 3.97201 6.81706C4.26363 6.46146 4.63213 6.10494 5.09595 5.80306L6.67356 7.38067C5.9688 7.82277 5.50024 8.60667 5.50024 9.5C5.50024 10.8807 6.61953 12 8.00024 12C8.89358 12 9.67747 11.5314 10.1196 10.8267ZM9.3807 10.0878C9.15205 10.6241 8.62005 11 8.00024 11C7.17182 11 6.50024 10.3284 6.50024 9.5C6.50024 8.88019 6.87616 8.34819 7.41244 8.11955L9.3807 10.0878ZM6.31962 4.19853L7.174 5.05291C7.43366 5.01852 7.70875 5 8.00017 5C10.0445 5 11.2857 5.9115 12.0283 6.81706C12.4041 7.27523 12.6538 7.73507 12.8091 8.08023C12.8866 8.25227 12.9399 8.39421 12.9732 8.49095C12.9898 8.53927 13.0014 8.57616 13.0085 8.5997L13.0159 8.62471L13.0169 8.62815L13.0172 8.62937C13.0885 8.89555 13.3618 9.05397 13.6283 8.9833C13.8952 8.91253 14.0542 8.63878 13.9835 8.37186L13.9832 8.37069L13.9827 8.36916L13.9816 8.365L13.9781 8.35236C13.9752 8.34204 13.9711 8.328 13.9658 8.31047C13.9552 8.27541 13.9397 8.22636 13.9187 8.1653C13.8766 8.04329 13.8124 7.87274 13.721 7.66977C13.5388 7.26493 13.2459 6.72477 12.8016 6.18295C11.904 5.0885 10.3952 4 8.00017 4C7.38264 4 6.82403 4.07236 6.31962 4.19853Z",
     },
   ],
   question: [
@@ -77,28 +119,38 @@ const CODICON_PATHS = {
       d: "M3 8C3 5.23858 5.23858 3 8 3C9.63527 3 11.0878 3.78495 12.0005 5H10C9.72386 5 9.5 5.22386 9.5 5.5C9.5 5.77614 9.72386 6 10 6H12.8904C12.8973 6.00014 12.9041 6.00014 12.911 6H13C13.2761 6 13.5 5.77614 13.5 5.5V2.5C13.5 2.22386 13.2761 2 13 2C12.7239 2 12.5 2.22386 12.5 2.5V4.03138C11.4009 2.78613 9.79253 2 8 2C4.68629 2 2 4.68629 2 8C2 11.3137 4.68629 14 8 14C11.1301 14 13.6999 11.6035 13.9756 8.54488C14.0003 8.26985 13.7975 8.0268 13.5225 8.00202C13.2474 7.97723 13.0044 8.1801 12.9796 8.45512C12.75 11.003 10.6079 13 8 13C5.23858 13 3 10.7614 3 8Z",
     },
   ],
+  layers: [
+    {
+      d: "M8 8.99993C7.819 8.99993 7.643 8.95093 7.486 8.85793L2.486 5.85693C2.186 5.67793 2 5.34893 2 4.99993C2 4.65093 2.187 4.32093 2.486 4.14193L7.486 1.14293C7.789 0.95693 8.207 0.95493 8.517 1.14493L13.513 4.14293C13.813 4.32293 13.999 4.65093 13.999 4.99993C13.999 5.34893 13.812 5.67893 13.513 5.85793L8.513 8.85693C8.357 8.95093 8.181 8.99993 8 8.99993ZM8 1.99993L3 4.99993L8 7.99993L13 4.99993L8 1.99993Z",
+    },
+    {
+      d: "M2.146 6.9873L8 10.5003L13.854 6.9873C13.946 7.1413 14 7.3173 14 7.5003C14 7.8493 13.814 8.1783 13.514 8.3583L8.514 11.3573C8.357 11.4513 8.181 11.5003 8 11.5003C7.819 11.5003 7.642 11.4513 7.486 11.3583L2.486 8.35731C2.187 8.17931 2 7.8503 2 7.5003C2 7.3163 2.054 7.1403 2.146 6.9873Z",
+    },
+    {
+      d: "M2.146 9.4873L8 13.0003L13.854 9.4873C13.946 9.6413 14 9.8173 14 10.0003C14 10.3493 13.814 10.6783 13.514 10.8583L8.514 13.8573C8.357 13.9513 8.181 14.0003 8 14.0003C7.819 14.0003 7.642 13.9513 7.486 13.8583L2.486 10.8573C2.187 10.6793 2 10.3503 2 10.0003C2 9.8163 2.054 9.6403 2.146 9.4873Z",
+    },
+  ],
+  symbolColor: [
+    {
+      d: "M8.00101 1C4.13401 1 1.00101 3.8 1.00101 7.667C1.00101 8.956 2.04501 10 3.33401 10C4.75101 10 4.72101 9 6.00001 9C6.64401 9 7.00001 9.606 7.00001 10.25V11.5C7.00001 13.433 8.56701 15 10.5 15C13.653 15 14.999 11.215 14.999 8C14.999 4.134 11.866 1 8.00001 1H8.00101ZM10.5 14C9.12201 14 8.00001 12.878 8.00001 11.5V10.25C8.00001 8.967 7.14001 8 6.00001 8C5.04001 8 4.49801 8.412 4.13901 8.685C3.85401 8.902 3.72401 9 3.33401 9C2.59901 9 2.00101 8.402 2.00101 7.667C2.00101 4.436 4.58001 2 8.00101 2C11.309 2 14 4.692 14 8C14 10.412 13.068 14 10.501 14H10.5ZM12 11C12 11.552 11.552 12 11 12C10.448 12 10 11.552 10 11C10 10.448 10.448 10 11 10C11.552 10 12 10.448 12 11ZM13 8C13 8.552 12.552 9 12 9C11.448 9 11 8.552 11 8C11 7.448 11.448 7 12 7C12.552 7 13 7.448 13 8ZM6.00001 5C6.00001 5.552 5.55201 6 5.00001 6C4.44801 6 4.00001 5.552 4.00001 5C4.00001 4.448 4.44801 4 5.00001 4C5.55201 4 6.00001 4.448 6.00001 5ZM10 5C10 4.448 10.448 4 11 4C11.552 4 12 4.448 12 5C12 5.552 11.552 6 11 6C10.448 6 10 5.552 10 5ZM9.00001 4C9.00001 4.552 8.55201 5 8.00001 5C7.44801 5 7.00001 4.552 7.00001 4C7.00001 3.448 7.44801 3 8.00001 3C8.55201 3 9.00001 3.448 9.00001 4Z",
+    },
+  ]
 };
 
 const elements = {
+  uploadSection: document.querySelector("#uploadSection"),
   fileInput: document.querySelector("#timelineFile"),
   fileLabel: document.querySelector("#fileLabel"),
   uploadButton: document.querySelector("#uploadButton"),
-  processButton: document.querySelector("#processButton"),
-  settingsToggleButton: document.querySelector("#settingsToggleButton"),
-  settingsPanel: document.querySelector("#settingsPanel"),
   helpButton: document.querySelector("#helpButton"),
   instructionsModal: document.querySelector("#instructionsModal"),
   closeInstructionsButton: document.querySelector("#closeInstructionsButton"),
   minimizeButton: document.querySelector("#minimizeButton"),
   restoreButton: document.querySelector("#restoreButton"),
+  addLayerButton: document.querySelector("#addLayerButton"),
   clearLayersButton: document.querySelector("#clearLayersButton"),
   layerSection: document.querySelector("#layerSection"),
   layerList: document.querySelector("#layerList"),
-  minSpeed: document.querySelector("#minSpeed"),
-  maxSpeed: document.querySelector("#maxSpeed"),
-  roundDigits: document.querySelector("#roundDigits"),
-  styleSize: document.querySelector("#styleSize"),
-  layerColor: document.querySelector("#layerColor"),
 };
 
 let selectedFiles = [];
@@ -107,26 +159,27 @@ let processQueue = [];
 let activeProcessingLayer = null;
 let nextLayerId = 1;
 let timelineMap = null;
+let defaultSettings = {
+  mode: "points",
+  minSpeed: 0.5,
+  maxSpeed: 500,
+  precision: 4,
+  size: 2.5,
+};
 
-setupPanelIconButton(elements.minimizeButton, "collapseAll", "Minimize controls");
+setupPanelIconButton(elements.minimizeButton, "eyeClosed", "Minimize controls");
 setupPanelIconButton(elements.helpButton, "question", "Open instructions");
 setupPanelIconButton(elements.closeInstructionsButton, "close", "Close instructions");
+setupPanelIconButton(elements.addLayerButton, "add", "Add layer");
 setupPanelIconButton(elements.clearLayersButton, "clearAll", "Clear all layers");
-attachColorPresets(elements.layerColor);
 
-elements.uploadButton.addEventListener("click", () => {
-  elements.fileInput.click();
-});
+elements.uploadButton.addEventListener("click", openUploadDialog);
+elements.addLayerButton.addEventListener("click", openUploadDialog);
 
 elements.fileInput.addEventListener("change", () => {
   selectedFiles = Array.from(elements.fileInput.files ?? []);
   updateUploadButtonMeta();
-  elements.processButton.disabled = selectedFiles.length === 0;
-});
-
-elements.processButton.addEventListener("click", processSelectedFiles);
-elements.settingsToggleButton.addEventListener("click", () => {
-  setSettingsVisible(elements.settingsPanel.hidden);
+  processSelectedFiles();
 });
 elements.helpButton.addEventListener("click", () => setInstructionsVisible(true));
 elements.closeInstructionsButton.addEventListener("click", () => setInstructionsVisible(false));
@@ -146,6 +199,10 @@ elements.clearLayersButton.addEventListener("click", clearAllLayers);
 
 renderLayerList();
 
+function openUploadDialog() {
+  elements.fileInput.click();
+}
+
 function processSelectedFiles() {
   if (!selectedFiles.length) return;
 
@@ -154,7 +211,6 @@ function processSelectedFiles() {
   selectedFiles = [];
   elements.fileInput.value = "";
   updateUploadButtonMeta();
-  elements.processButton.disabled = true;
 
   for (const layer of newLayers) {
     enqueueProcessLayer(layer);
@@ -164,17 +220,19 @@ function processSelectedFiles() {
 }
 
 function createUploadLayer(file) {
+  const id = nextLayerId++;
+
   return {
-    id: nextLayerId++,
+    id,
     file,
     fileType: getFileType(file),
     name: file.name,
-    mode: getDefaultMapMode(),
-    minSpeed: readNumber(elements.minSpeed, 0.5),
-    maxSpeed: readNumber(elements.maxSpeed, 500),
-    precision: readInteger(elements.roundDigits, 4, 1, 7),
-    size: readNumber(elements.styleSize, 2.5),
-    color: elements.layerColor.value || "#2563eb",
+    mode: defaultSettings.mode,
+    minSpeed: defaultSettings.minSpeed,
+    maxSpeed: defaultSettings.maxSpeed,
+    precision: defaultSettings.precision,
+    size: defaultSettings.size,
+    color: getLayerCycleColor(id - 1),
     status: "queued",
     progress: 0,
     stats: null,
@@ -401,6 +459,7 @@ function centerOnLayerSampleAverage() {
 
 function renderLayerList() {
   const hasLayers = uploadLayers.length > 0;
+  elements.uploadSection.hidden = hasLayers;
   elements.layerSection.hidden = !hasLayers;
   elements.clearLayersButton.disabled = !hasLayers;
 
@@ -429,13 +488,22 @@ function updateUploadButtonMeta() {
   elements.uploadButton.setAttribute("aria-label", title);
 }
 
-function setSettingsVisible(isVisible) {
-  elements.settingsPanel.hidden = !isVisible;
-  elements.settingsToggleButton.setAttribute("aria-expanded", String(isVisible));
-}
-
 function setInstructionsVisible(isVisible) {
   elements.instructionsModal.hidden = !isVisible;
+}
+
+function renderSettingsControls(container, { modeName, values, onChange }) {
+  container.replaceChildren(
+    createSegmentedControl(modeName, "Mode", values.mode, [
+      ["points", "Points"],
+      ["route", "Route"],
+    ], (value) => onChange("mode", value)),
+    createColorControl("Color", values.color, (value) => onChange("color", value), "layer-span-3"),
+    createNumberControl("Width", values.size, 1, 12, 0.5, (value) => onChange("size", value), "layer-span-3"),
+    createNumberControl("Precision", values.precision, 1, 7, 1, (value) => onChange("precision", value), "layer-span-4"),
+    createNumberControl("Min speed", values.minSpeed, 0, 1000, 0.1, (value) => onChange("minSpeed", value), "layer-span-4"),
+    createNumberControl("Max speed", values.maxSpeed, 1, 5000, 10, (value) => onChange("maxSpeed", value), "layer-span-4"),
+  );
 }
 
 function createLayerCard(layer) {
@@ -479,39 +547,43 @@ function createLayerCard(layer) {
 
   const controls = document.createElement("div");
   controls.className = "layer-controls";
-  controls.append(
-    createSegmentedControl(`layer-mode-${layer.id}`, "Mode", layer.mode, [
-      ["points", "Points"],
-      ["route", "Route"],
-    ], (value) => {
-      layer.mode = value;
-      rebuildLayer(layer);
-      renderAllMapLayers();
-      renderLayerList();
-    }),
-    createColorControl("Color", layer.color, (value) => {
-      layer.color = value;
-      rebuildLayer(layer);
-      renderAllMapLayers();
-    }, "layer-span-3"),
-    createNumberControl("Width", layer.size, 1, 12, 0.5, (value) => {
-      layer.size = value;
-      rebuildLayer(layer);
-      renderAllMapLayers();
-    }, "layer-span-3"),
-    createNumberControl("Precision", layer.precision, 1, 7, 1, (value) => {
-      layer.precision = Math.round(value);
-      rebuildLayer(layer);
-      renderAllMapLayers();
-      renderLayerList();
-    }, "layer-span-4"),
-    createNumberControl("Min speed", layer.minSpeed, 0, 1000, 0.1, (value) => {
-      layer.minSpeed = value;
-    }, "layer-span-4"),
-    createNumberControl("Max speed", layer.maxSpeed, 1, 5000, 10, (value) => {
-      layer.maxSpeed = value;
-    }, "layer-span-4"),
-  );
+  renderSettingsControls(controls, {
+    modeName: `layer-mode-${layer.id}`,
+    values: layer,
+    onChange: (field, value) => {
+      if (field === "mode") {
+        layer.mode = value;
+        rebuildLayer(layer);
+        renderAllMapLayers();
+        renderLayerList();
+        return;
+      }
+
+      if (field === "color") {
+        layer.color = value;
+        rebuildLayer(layer);
+        renderAllMapLayers();
+        return;
+      }
+
+      if (field === "size") {
+        layer.size = value;
+        rebuildLayer(layer);
+        renderAllMapLayers();
+        return;
+      }
+
+      if (field === "precision") {
+        layer.precision = Math.round(value);
+        rebuildLayer(layer);
+        renderAllMapLayers();
+        renderLayerList();
+        return;
+      }
+
+      layer[field] = value;
+    },
+  });
 
   card.append(header, controls);
   return card;
@@ -600,49 +672,159 @@ function createColorControl(label, value, onChange, className = "") {
   const input = document.createElement("input");
   input.type = "color";
   input.value = value;
+  input.className = "color-picker-input";
   input.setAttribute("aria-label", label);
-  input.addEventListener("input", () => onChange(input.value));
-  row.append(input, createColorPresetGroup(input, onChange));
+  row.append(createColorSwatchGroup(input, onChange), input);
   wrapper.append(text, row);
   return wrapper;
 }
 
-function attachColorPresets(input) {
-  input.closest(".color-input-row")?.querySelector("[data-color-presets]")?.replaceWith(createColorPresetGroup(input));
-}
-
-function createColorPresetGroup(input, onChange = () => {}) {
+function createColorSwatchGroup(input, onChange = () => {}) {
   const group = document.createElement("div");
   group.className = "color-presets";
   group.dataset.colorPresets = "";
-  group.setAttribute("aria-label", "Preset colors");
+  group.setAttribute("aria-label", "Layer colors");
 
-  for (const color of PRESET_COLORS) {
+  for (const color of BASE_LAYER_COLORS) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "color-preset";
     button.style.backgroundColor = color;
+    button.dataset.color = color;
     button.title = color;
-    button.setAttribute("aria-label", `Use color ${color}`);
+    button.setAttribute("aria-label", "Use color " + color);
     button.addEventListener("click", () => {
-      input.value = color;
-      onChange(color);
+      setColorInputValue(input, color, onChange);
       syncColorPresetSelection(group, color);
     });
     group.append(button);
   }
 
-  input.addEventListener("input", () => syncColorPresetSelection(group, input.value));
+  const customButton = document.createElement("button");
+  customButton.type = "button";
+  customButton.className = "color-preset color-preset-custom";
+  customButton.dataset.customColor = "";
+  customButton.title = "Custom color";
+  customButton.setAttribute("aria-label", "Choose custom color");
+  customButton.append(createCodicon("symbolColor"));
+  customButton.addEventListener("click", () => openColorPicker(input));
+  group.append(customButton);
+
+  input.addEventListener("input", () => {
+    onChange(input.value);
+    syncColorPresetSelection(group, input.value);
+  });
   syncColorPresetSelection(group, input.value);
   return group;
 }
 
+function setColorInputValue(input, color, onChange) {
+  input.value = color;
+  onChange(color);
+
+  const group = input.closest(".color-input-row")?.querySelector("[data-color-presets]");
+  if (group) {
+    syncColorPresetSelection(group, color);
+  }
+}
+
+function openColorPicker(input) {
+  if (typeof input.showPicker === "function") {
+    input.showPicker();
+    return;
+  }
+
+  input.click();
+}
+
 function syncColorPresetSelection(group, activeColor) {
-  for (const button of group.querySelectorAll(".color-preset")) {
-    const isActive = button.title.toLowerCase() === activeColor.toLowerCase();
+  const normalizedActiveColor = activeColor.toLowerCase();
+  const customButton = group.querySelector("[data-custom-color]");
+  let isBaseColor = false;
+
+  for (const button of group.querySelectorAll("[data-color]")) {
+    const isActive = button.dataset.color.toLowerCase() === normalizedActiveColor;
+    isBaseColor ||= isActive;
     button.classList.toggle("is-selected", isActive);
     button.setAttribute("aria-pressed", String(isActive));
   }
+
+  if (!customButton) return;
+
+  customButton.classList.toggle("is-selected", !isBaseColor);
+  customButton.classList.toggle("has-custom-color", !isBaseColor);
+  customButton.setAttribute("aria-pressed", String(!isBaseColor));
+  customButton.style.backgroundColor = isBaseColor ? "#fff" : activeColor;
+}
+
+function getLayerCycleColor(index) {
+  if (index < BASE_LAYER_COLORS.length) {
+    return BASE_LAYER_COLORS[index];
+  }
+
+  let remaining = index - BASE_LAYER_COLORS.length;
+  let depth = 1;
+  let colorsPerArc = 1;
+  let colorsAtDepth = BASE_COLOR_HUES.length * colorsPerArc;
+
+  while (remaining >= colorsAtDepth) {
+    remaining -= colorsAtDepth;
+    depth += 1;
+    colorsPerArc *= 2;
+    colorsAtDepth = BASE_COLOR_HUES.length * colorsPerArc;
+  }
+
+  const arcIndex = Math.floor(remaining / colorsPerArc);
+  const colorIndex = remaining % colorsPerArc;
+  const ratio = (2 * colorIndex + 1) / 2 ** depth;
+  const nextArcIndex = (arcIndex + 1) % BASE_COLOR_HUES.length;
+  const hue = interpolateHue(BASE_COLOR_HUES[arcIndex], BASE_COLOR_HUES[nextArcIndex], ratio);
+  return hslToHex(hue, BASE_COLOR_SATURATION, BASE_COLOR_LIGHTNESS);
+}
+
+function interpolateHue(startHue, endHue, ratio) {
+  const delta = ((endHue - startHue + 540) % 360) - 180;
+  return normalizeHue(startHue + delta * ratio);
+}
+
+function hslToHex(hue, saturation, lightness) {
+  const normalizedHue = normalizeHue(hue);
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const secondary = chroma * (1 - Math.abs((normalizedHue / 60) % 2 - 1));
+  const match = lightness - chroma / 2;
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (normalizedHue < 60) {
+    red = chroma;
+    green = secondary;
+  } else if (normalizedHue < 120) {
+    red = secondary;
+    green = chroma;
+  } else if (normalizedHue < 180) {
+    green = chroma;
+    blue = secondary;
+  } else if (normalizedHue < 240) {
+    green = secondary;
+    blue = chroma;
+  } else if (normalizedHue < 300) {
+    red = secondary;
+    blue = chroma;
+  } else {
+    red = chroma;
+    blue = secondary;
+  }
+
+  return [red, green, blue]
+    .map((channel) => Math.round((channel + match) * 255).toString(16).padStart(2, "0"))
+    .join("")
+    .padStart(6, "0")
+    .replace(/^/, "#");
+}
+
+function normalizeHue(hue) {
+  return ((hue % 360) + 360) % 360;
 }
 
 function createNumberControl(label, value, min, max, step, onChange, className = "") {
@@ -669,14 +851,14 @@ function createNumberControl(label, value, min, max, step, onChange, className =
 }
 
 function getLayerMeta(layer) {
-  const type = layer.fileType.toUpperCase();
-  const status = layer.status === "error" ? `Error: ${layer.error}` : layer.status;
+  if (layer.status === "error") {
+    return `Error: ${layer.error}`;
+  }
+
   const stats = layer.stats ?? emptyStats();
   const kept = layer.status === "processing" ? layer.keptCount ?? 0 : layer.cleanedPoints.length;
-  const mapped = layer.displayPoints.length;
-  return `${type} · ${status} · raw ${formatNumber(stats.rawCount)} · kept ${formatNumber(
-    kept,
-  )} · map ${formatNumber(mapped)}`;
+  const displayed = layer.displayPoints.length;
+  return `raw ${formatNumber(stats.rawCount)} · kept ${formatNumber(kept)} · display ${formatNumber(displayed)}`;
 }
 
 function emptyStats() {
@@ -692,10 +874,6 @@ function emptyStats() {
 function setPanelCollapsed(isCollapsed) {
   document.body.classList.toggle("is-panel-collapsed", isCollapsed);
   timelineMap.render();
-}
-
-function getDefaultMapMode() {
-  return document.querySelector('input[name="mapMode"]:checked')?.value ?? "points";
 }
 
 function getFileType(file) {
@@ -716,6 +894,149 @@ function formatNumber(value) {
   return new Intl.NumberFormat().format(value);
 }
 
+class GlobeBasemapTexture {
+  constructor(source) {
+    this.source = source;
+    this.status = "idle";
+    this.loadPromise = null;
+    this.image = null;
+    this.sourcePixels = null;
+    this.renderCanvas = null;
+    this.renderContext = null;
+    this.renderImageData = null;
+    this.renderWidth = 0;
+    this.renderHeight = 0;
+  }
+
+  load() {
+    if (this.loadPromise) return this.loadPromise;
+
+    this.status = "loading";
+    this.loadPromise = new Promise((resolve, reject) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.onload = () => {
+        this.image = image;
+        this.buildSourceTexture();
+        this.status = "ready";
+        resolve(this);
+      };
+      image.onerror = () => {
+        this.status = "error";
+        reject(new Error(`Unable to load globe basemap: ${this.source}`));
+      };
+      image.src = this.source;
+    });
+
+    return this.loadPromise;
+  }
+
+  buildSourceTexture() {
+    const width = GLOBE_SOURCE_TEXTURE_WIDTH;
+    const height = Math.round((WORLD_HIGH_VIEWBOX.height / WORLD_HIGH_VIEWBOX.width) * width);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.clearRect(0, 0, width, height);
+    context.drawImage(this.image, 0, 0, width, height);
+    this.sourcePixels = context.getImageData(0, 0, width, height);
+  }
+
+  draw(ctx, geometry, theme, viewport) {
+    if (this.status === "idle") {
+      this.load().catch(() => {});
+      return;
+    }
+
+    if (this.status !== "ready" || !this.sourcePixels) return;
+
+    const rendered = this.renderToViewportCanvas(geometry, theme, viewport);
+    if (!rendered) return;
+
+    const { canvas, bounds } = rendered;
+    ctx.drawImage(canvas, bounds.left, bounds.top, bounds.width, bounds.height);
+  }
+
+  renderToViewportCanvas(geometry, theme, viewport) {
+    const bounds = getGlobeViewportBounds(geometry, viewport);
+    if (bounds.width <= 0 || bounds.height <= 0) return null;
+
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, GLOBE_RENDER_PIXEL_RATIO_CAP);
+    const width = Math.max(1, Math.ceil(bounds.width * pixelRatio));
+    const height = Math.max(1, Math.ceil(bounds.height * pixelRatio));
+
+    if (!this.renderCanvas) {
+      this.renderCanvas = document.createElement("canvas");
+    }
+
+    if (this.renderWidth !== width || this.renderHeight !== height) {
+      this.renderCanvas.width = width;
+      this.renderCanvas.height = height;
+      this.renderContext = this.renderCanvas.getContext("2d");
+      this.renderImageData = this.renderContext.createImageData(width, height);
+      this.renderWidth = width;
+      this.renderHeight = height;
+    }
+
+    const data = this.renderImageData.data;
+    data.fill(0);
+
+    const source = this.sourcePixels.data;
+    const sourceWidth = this.sourcePixels.width;
+    const sourceHeight = this.sourcePixels.height;
+    const sinCenterLat = Math.sin(geometry.centerLatRad);
+    const cosCenterLat = Math.cos(geometry.centerLatRad);
+    const landColor = theme.landColor;
+    const borderColor = theme.borderColor;
+
+    for (let y = 0; y < height; y += 1) {
+      const cssY = bounds.top + (y + 0.5) / pixelRatio;
+      const yNorth = (geometry.cy - cssY) / geometry.radius;
+
+      for (let x = 0; x < width; x += 1) {
+        const cssX = bounds.left + (x + 0.5) / pixelRatio;
+        const xEast = (cssX - geometry.cx) / geometry.radius;
+        const rhoSquared = xEast * xEast + yNorth * yNorth;
+        if (rhoSquared > 1) continue;
+
+        const coordinates = inverseOrthographicPoint(
+          xEast,
+          yNorth,
+          rhoSquared,
+          geometry.centerLatRad,
+          geometry.centerLonRad,
+          sinCenterLat,
+          cosCenterLat,
+        );
+        if (!coordinates || Math.abs(coordinates.lat) > WORLD_HIGH_LAT_LIMIT) continue;
+
+        const sample = sampleWorldHighTexture(
+          source,
+          sourceWidth,
+          sourceHeight,
+          coordinates.lat,
+          coordinates.lon,
+        );
+        if (!sample) continue;
+
+        const color = sample.isBorder ? borderColor : landColor;
+        const alpha = sample.alpha * color.a;
+        if (alpha <= 0) continue;
+
+        const outputIndex = (y * width + x) * 4;
+        data[outputIndex] = color.r;
+        data[outputIndex + 1] = color.g;
+        data[outputIndex + 2] = color.b;
+        data[outputIndex + 3] = Math.round(alpha * 255);
+      }
+    }
+
+    this.renderContext.putImageData(this.renderImageData, 0, 0);
+    return { canvas: this.renderCanvas, bounds };
+  }
+}
+
 class TimelineMap {
   constructor(container) {
     this.container = container;
@@ -729,23 +1050,87 @@ class TimelineMap {
     this.center = { lat: DEFAULT_CENTER[0], lon: DEFAULT_CENTER[1] };
     this.zoom = DEFAULT_ZOOM;
     this.layers = [];
+    this.mapStyle = MAP_STYLES[0];
+    this.viewMode = "flat";
+    this.globeBasemap = new GlobeBasemapTexture(GLOBE_BASEMAP_SOURCE);
     this.frame = null;
     this.drag = null;
 
     this.container.append(this.tilePane, this.overlay, this.controls, this.attribution);
     this.bindEvents();
+    this.setMapStyle(this.mapStyle.id);
+    this.setViewMode(this.viewMode);
+    this.globeBasemap.load().then(() => this.render()).catch(() => this.render());
     new ResizeObserver(() => this.render()).observe(this.container);
   }
 
   setView([lat, lon], zoom = this.zoom) {
     this.center = { lat: clampLatitude(lat), lon: wrapLongitude(lon) };
-    this.zoom = clampZoom(zoom);
+    this.zoom = clampZoomForView(zoom, this.viewMode);
     this.render();
   }
 
   setLayers(layers) {
     this.layers = layers;
     this.render();
+  }
+
+  setMapStyle(styleId) {
+    const nextStyle = MAP_STYLES.find((style) => style.id === styleId) ?? MAP_STYLES[0];
+    const changed = nextStyle.id !== this.mapStyle.id;
+    this.mapStyle = nextStyle;
+    this.container.style.background = this.viewMode === "globe" ? getGlobeTheme().space : nextStyle.background;
+    this.attribution.innerHTML = nextStyle.attribution;
+    this.attribution.hidden = this.viewMode === "globe" || !nextStyle.attribution;
+
+    if (changed) {
+      this.tilePane.replaceChildren();
+      this.tiles.clear();
+    }
+
+    this.syncMapStyleControls();
+    this.render();
+  }
+
+  setViewMode(viewMode) {
+    const nextMode = viewMode === "globe" ? "globe" : "flat";
+    const changed = nextMode !== this.viewMode;
+    this.viewMode = nextMode;
+    this.container.classList.toggle("is-globe-mode", nextMode === "globe");
+    this.zoom = clampZoomForView(this.zoom, nextMode);
+    this.container.style.background = nextMode === "globe" ? getGlobeTheme().space : this.mapStyle.background;
+    this.attribution.hidden = nextMode === "globe" || !this.mapStyle.attribution;
+
+    if (nextMode === "globe" || changed) {
+      this.tilePane.replaceChildren();
+      this.tiles.clear();
+    }
+
+    this.syncMapViewControls();
+    this.render();
+  }
+
+  setMapSettingsVisible(isVisible) {
+    const button = this.controls.querySelector("[data-map-settings]");
+    const panel = this.controls.querySelector("[data-map-settings-panel]");
+    panel.hidden = !isVisible;
+    button.setAttribute("aria-expanded", String(isVisible));
+  }
+
+  syncMapViewControls() {
+    for (const button of this.controls.querySelectorAll("[data-map-view]")) {
+      const isSelected = button.dataset.mapView === this.viewMode;
+      button.classList.toggle("is-selected", isSelected);
+      button.setAttribute("aria-pressed", String(isSelected));
+    }
+  }
+
+  syncMapStyleControls() {
+    for (const button of this.controls.querySelectorAll("[data-map-style]")) {
+      const isSelected = button.dataset.mapStyle === this.mapStyle.id;
+      button.classList.toggle("is-selected", isSelected);
+      button.setAttribute("aria-pressed", String(isSelected));
+    }
   }
 
   latLonToContainerPoint(lat, lon) {
@@ -787,11 +1172,55 @@ class TimelineMap {
       .querySelector("[data-zoom-out]")
       .addEventListener("click", () => this.zoomBy(-ZOOM_BUTTON_STEP));
 
+    const settingsButton = this.controls.querySelector("[data-map-settings]");
+    const settingsPanel = this.controls.querySelector("[data-map-settings-panel]");
+    settingsButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      this.setMapSettingsVisible(settingsPanel.hidden);
+    });
+    settingsPanel.addEventListener("click", (event) => event.stopPropagation());
+
+    for (const button of settingsPanel.querySelectorAll("[data-map-view]")) {
+      button.addEventListener("click", () => {
+        this.setViewMode(button.dataset.mapView);
+        this.setMapSettingsVisible(false);
+      });
+    }
+
+    for (const button of settingsPanel.querySelectorAll("[data-map-style]")) {
+      button.addEventListener("click", () => {
+        this.setMapStyle(button.dataset.mapStyle);
+        this.setMapSettingsVisible(false);
+      });
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!this.controls.contains(event.target)) {
+        this.setMapSettingsVisible(false);
+      }
+    });
+
     this.container.addEventListener("pointerdown", (event) => {
       if (event.target.closest(".map-controls")) return;
       this.container.setPointerCapture(event.pointerId);
       this.container.classList.add("is-dragging");
+
+      if (this.viewMode === "globe") {
+        const geometry = this.getGlobeGeometry(this.container.clientWidth, this.container.clientHeight);
+        this.drag = {
+          mode: "globe",
+          pointerId: event.pointerId,
+          x: event.clientX,
+          y: event.clientY,
+          lat: this.center.lat,
+          lon: this.center.lon,
+          degreesPerPixel: 180 / Math.PI / geometry.radius,
+        };
+        return;
+      }
+
       this.drag = {
+        mode: "flat",
         pointerId: event.pointerId,
         x: event.clientX,
         y: event.clientY,
@@ -801,9 +1230,21 @@ class TimelineMap {
 
     this.container.addEventListener("pointermove", (event) => {
       if (!this.drag || this.drag.pointerId !== event.pointerId) return;
+      const dx = event.clientX - this.drag.x;
+      const dy = event.clientY - this.drag.y;
+
+      if (this.drag.mode === "globe") {
+        this.center = {
+          lat: clamp(this.drag.lat + dy * this.drag.degreesPerPixel, -89.5, 89.5),
+          lon: wrapLongitude(this.drag.lon - dx * this.drag.degreesPerPixel),
+        };
+        this.render();
+        return;
+      }
+
       const nextCenter = {
-        x: this.drag.center.x - (event.clientX - this.drag.x),
-        y: this.drag.center.y - (event.clientY - this.drag.y),
+        x: this.drag.center.x - dx,
+        y: this.drag.center.y - dy,
       };
       this.center = unprojectPoint(nextCenter, this.zoom);
       this.render();
@@ -838,8 +1279,14 @@ class TimelineMap {
   }
 
   zoomAround(clientX, clientY, delta) {
-    const nextZoom = clampZoom(this.zoom + delta);
+    const nextZoom = clampZoomForView(this.zoom + delta, this.viewMode);
     if (nextZoom === this.zoom) return;
+
+    if (this.viewMode === "globe") {
+      this.zoom = nextZoom;
+      this.render();
+      return;
+    }
 
     const rect = this.container.getBoundingClientRect();
     const offset = {
@@ -892,6 +1339,12 @@ class TimelineMap {
     const height = this.container.clientHeight;
     if (!width || !height) return;
 
+    if (this.viewMode === "globe") {
+      this.tilePane.replaceChildren();
+      this.tiles.clear();
+      return;
+    }
+
     const tileZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round(this.zoom)));
     const tileScale = 2 ** tileZoom;
     const displayScale = 2 ** (this.zoom - tileZoom);
@@ -907,13 +1360,19 @@ class TimelineMap {
       tileScale - 1,
       Math.floor((tileTopLeft.y + height / displayScale) / TILE_SIZE) + 1,
     );
+    if (!this.mapStyle.tileUrl) {
+      this.tilePane.replaceChildren();
+      this.tiles.clear();
+      return;
+    }
+
     const visible = new Set();
 
     for (let tileX = startX; tileX <= endX; tileX += 1) {
       const wrappedX = modulo(tileX, tileScale);
 
       for (let tileY = startY; tileY <= endY; tileY += 1) {
-        const key = `${tileZoom}:${tileX}:${tileY}`;
+        const key = `${this.mapStyle.id}:${tileZoom}:${tileX}:${tileY}`;
         visible.add(key);
 
         let tile = this.tiles.get(key);
@@ -923,7 +1382,7 @@ class TimelineMap {
           tile.alt = "";
           tile.decoding = "async";
           tile.draggable = false;
-          tile.src = `https://tile.openstreetmap.org/${tileZoom}/${wrappedX}/${tileY}.png`;
+          tile.src = this.mapStyle.tileUrl({ z: tileZoom, x: wrappedX, y: tileY });
           this.tiles.set(key, tile);
           this.tilePane.append(tile);
         }
@@ -957,9 +1416,132 @@ class TimelineMap {
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
+    if (this.viewMode === "globe") {
+      this.renderGlobe(ctx, width, height);
+      return;
+    }
+
     for (const layer of this.layers) {
       layer.draw(ctx, this);
     }
+  }
+
+  renderGlobe(ctx, width, height) {
+    const geometry = this.getGlobeGeometry(width, height);
+    const theme = getGlobeTheme();
+    const { cx, cy, radius } = geometry;
+    const gradient = ctx.createRadialGradient(
+      cx - radius * 0.35,
+      cy - radius * 0.45,
+      radius * 0.08,
+      cx,
+      cy,
+      radius,
+    );
+    gradient.addColorStop(0, theme.oceanHighlight);
+    gradient.addColorStop(0.38, theme.oceanShallow);
+    gradient.addColorStop(0.78, theme.oceanMid);
+    gradient.addColorStop(1, theme.oceanDeep);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    ctx.clip();
+    this.globeBasemap.draw(ctx, geometry, theme, { width, height });
+    this.drawGlobeGraticule(ctx, geometry, theme);
+
+    for (const layer of this.layers) {
+      layer.drawGlobe(ctx, this, geometry);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = theme.outline;
+    ctx.stroke();
+  }
+
+  getGlobeGeometry(width, height) {
+    const scale = GLOBE_ZOOM_SCALE ** (this.zoom - LOAD_CENTER_ZOOM);
+    const radius = Math.max(36, Math.min(width, height) * GLOBE_BASE_RADIUS_RATIO * scale);
+    return {
+      cx: width / 2,
+      cy: height / 2,
+      radius,
+      centerLatRad: degreesToRadians(this.center.lat),
+      centerLonRad: degreesToRadians(this.center.lon),
+    };
+  }
+
+  drawGlobeGraticule(ctx, geometry, theme) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = theme.graticule;
+
+    for (let lat = -60; lat <= 60; lat += 30) {
+      const coordinates = [];
+      for (let lon = -180; lon <= 180; lon += 2) {
+        coordinates.push([lat, lon]);
+      }
+      this.drawGlobePolyline(ctx, coordinates, geometry);
+    }
+
+    for (let lon = -180; lon < 180; lon += 30) {
+      const coordinates = [];
+      for (let lat = -90; lat <= 90; lat += 2) {
+        coordinates.push([lat, lon]);
+      }
+      this.drawGlobePolyline(ctx, coordinates, geometry);
+    }
+
+    ctx.restore();
+  }
+
+  drawGlobePolyline(ctx, coordinates, geometry) {
+    let drawing = false;
+    ctx.beginPath();
+
+    for (const [lat, lon] of coordinates) {
+      const point = this.latLonToGlobePoint(lat, lon, geometry);
+
+      if (!point.visible) {
+        drawing = false;
+        continue;
+      }
+
+      if (!drawing) {
+        ctx.moveTo(point.x, point.y);
+        drawing = true;
+      } else {
+        ctx.lineTo(point.x, point.y);
+      }
+    }
+
+    if (drawing) {
+      ctx.stroke();
+    }
+  }
+
+  latLonToGlobePoint(lat, lon, geometry) {
+    const phi = degreesToRadians(lat);
+    const lambda = degreesToRadians(lon);
+    const delta = normalizeRadians(lambda - geometry.centerLonRad);
+    const sinPhi = Math.sin(phi);
+    const cosPhi = Math.cos(phi);
+    const sinPhi0 = Math.sin(geometry.centerLatRad);
+    const cosPhi0 = Math.cos(geometry.centerLatRad);
+    const cosDelta = Math.cos(delta);
+    const cosC = sinPhi0 * sinPhi + cosPhi0 * cosPhi * cosDelta;
+
+    return {
+      x: geometry.cx + geometry.radius * cosPhi * Math.sin(delta),
+      y: geometry.cy - geometry.radius * (cosPhi0 * sinPhi - sinPhi0 * cosPhi * cosDelta),
+      visible: cosC >= -0.002,
+    };
   }
 }
 
@@ -986,6 +1568,23 @@ class PointCanvasLayer {
       ) {
         continue;
       }
+      ctx.beginPath();
+      ctx.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawGlobe(ctx, map, geometry) {
+    ctx.fillStyle = this.options.color || "#2563eb";
+    ctx.globalAlpha = 0.78;
+    const radius = Math.max(1.6, this.options.radius || 2);
+    const width = map.container.clientWidth;
+    const height = map.container.clientHeight;
+    const pad = radius + 2;
+
+    for (const point of this.points) {
+      const pixel = map.latLonToGlobePoint(point[0], point[1], geometry);
+      if (!pixel.visible || !globePointIntersectsViewport(pixel, width, height, pad)) continue;
       ctx.beginPath();
       ctx.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
       ctx.fill();
@@ -1042,15 +1641,123 @@ class RouteCanvasLayer {
       ctx.stroke();
     }
   }
+
+  drawGlobe(ctx, map, geometry) {
+    const lineWidth = this.options.width || 2;
+    ctx.lineWidth = lineWidth;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = this.options.color || "#dc2626";
+    ctx.globalAlpha = 0.9;
+
+    const width = map.container.clientWidth;
+    const height = map.container.clientHeight;
+    const pad = lineWidth + 4;
+    let previousProjection = null;
+    let previousYear = null;
+    let drawing = false;
+
+    ctx.beginPath();
+    for (const point of this.points) {
+      const year = point[5];
+      const projection = map.latLonToGlobePoint(point[0], point[1], geometry);
+
+      if (!previousProjection || year !== previousYear) {
+        previousProjection = projection;
+        previousYear = year;
+        continue;
+      }
+
+      if (
+        previousProjection.visible &&
+        projection.visible &&
+        globeSegmentIntersectsViewport(previousProjection, projection, width, height, pad)
+      ) {
+        ctx.moveTo(previousProjection.x, previousProjection.y);
+        ctx.lineTo(projection.x, projection.y);
+        drawing = true;
+      }
+
+      previousProjection = projection;
+      previousYear = year;
+    }
+
+    if (drawing) {
+      ctx.stroke();
+    }
+  }
 }
 
 function createMapControls() {
   const controls = document.createElement("div");
   controls.className = "map-controls";
-  controls.innerHTML = `
-    <button type="button" data-zoom-in aria-label="Zoom in">+</button>
-    <button type="button" data-zoom-out aria-label="Zoom out">-</button>
-  `;
+
+  const zoomGroup = document.createElement("div");
+  zoomGroup.className = "map-control-group";
+
+  const zoomInButton = document.createElement("button");
+  zoomInButton.type = "button";
+  zoomInButton.dataset.zoomIn = "";
+  zoomInButton.setAttribute("aria-label", "Zoom in");
+  zoomInButton.textContent = "+";
+
+  const zoomOutButton = document.createElement("button");
+  zoomOutButton.type = "button";
+  zoomOutButton.dataset.zoomOut = "";
+  zoomOutButton.setAttribute("aria-label", "Zoom out");
+  zoomOutButton.textContent = "-";
+  zoomGroup.append(zoomInButton, zoomOutButton);
+
+  const settingsWrap = document.createElement("div");
+  settingsWrap.className = "map-layer-settings";
+
+  const settingsButton = document.createElement("button");
+  settingsButton.type = "button";
+  settingsButton.className = "map-settings-button";
+  settingsButton.dataset.mapSettings = "";
+  settingsButton.title = "Map settings";
+  settingsButton.setAttribute("aria-label", "Map settings");
+  settingsButton.setAttribute("aria-expanded", "false");
+  settingsButton.append(createCodicon("layers"));
+
+  const settingsPanel = document.createElement("div");
+  settingsPanel.className = "map-settings-popover";
+  settingsPanel.dataset.mapSettingsPanel = "";
+  settingsPanel.hidden = true;
+
+  const viewTitle = document.createElement("div");
+  viewTitle.className = "map-settings-title";
+  viewTitle.textContent = "View";
+  settingsPanel.append(viewTitle);
+
+  for (const [viewMode, label] of [
+    ["flat", "Flat"],
+    ["globe", "Globe"],
+  ]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-settings-option";
+    button.dataset.mapView = viewMode;
+    button.textContent = label;
+    settingsPanel.append(button);
+  }
+
+  const title = document.createElement("div");
+  title.className = "map-settings-title map-settings-title-secondary";
+  title.textContent = "Base map";
+  settingsPanel.append(title);
+
+  for (const style of MAP_STYLES) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "map-settings-option";
+    button.dataset.mapStyle = style.id;
+    button.textContent = style.label;
+    settingsPanel.append(button);
+  }
+
+  settingsWrap.append(settingsButton, settingsPanel);
+  controls.append(zoomGroup, settingsWrap);
   return controls;
 }
 
@@ -1059,6 +1766,152 @@ function createAttribution() {
   attribution.className = "map-attribution";
   attribution.innerHTML = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
   return attribution;
+}
+
+function getGlobeViewportBounds(geometry, viewport) {
+  const left = Math.max(0, Math.floor(geometry.cx - geometry.radius));
+  const top = Math.max(0, Math.floor(geometry.cy - geometry.radius));
+  const right = Math.min(viewport.width, Math.ceil(geometry.cx + geometry.radius));
+  const bottom = Math.min(viewport.height, Math.ceil(geometry.cy + geometry.radius));
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+  };
+}
+
+function globePointIntersectsViewport(point, width, height, pad = 0) {
+  return point.x >= -pad && point.x <= width + pad && point.y >= -pad && point.y <= height + pad;
+}
+
+function globeSegmentIntersectsViewport(start, end, width, height, pad = 0) {
+  return (
+    Math.max(start.x, end.x) >= -pad &&
+    Math.min(start.x, end.x) <= width + pad &&
+    Math.max(start.y, end.y) >= -pad &&
+    Math.min(start.y, end.y) <= height + pad
+  );
+}
+
+function getGlobeTheme() {
+  const landFallback = parseCssColor(GLOBE_THEME_FALLBACKS.land);
+  const borderFallback = parseCssColor(GLOBE_THEME_FALLBACKS.border);
+
+  return {
+    space: readCssVariable("--globe-space", GLOBE_THEME_FALLBACKS.space),
+    oceanHighlight: readCssVariable(
+      "--globe-ocean-highlight",
+      GLOBE_THEME_FALLBACKS.oceanHighlight,
+    ),
+    oceanShallow: readCssVariable("--globe-ocean-shallow", GLOBE_THEME_FALLBACKS.oceanShallow),
+    oceanMid: readCssVariable("--globe-ocean-mid", GLOBE_THEME_FALLBACKS.oceanMid),
+    oceanDeep: readCssVariable("--globe-ocean-deep", GLOBE_THEME_FALLBACKS.oceanDeep),
+    landColor: parseCssColor(readCssVariable("--globe-land", GLOBE_THEME_FALLBACKS.land), landFallback),
+    borderColor: parseCssColor(
+      readCssVariable("--globe-border", GLOBE_THEME_FALLBACKS.border),
+      borderFallback,
+    ),
+    graticule: readCssVariable("--globe-graticule", GLOBE_THEME_FALLBACKS.graticule),
+    outline: readCssVariable("--globe-outline", GLOBE_THEME_FALLBACKS.outline),
+  };
+}
+
+function readCssVariable(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function parseCssColor(value, fallback = { r: 0, g: 0, b: 0, a: 1 }) {
+  const trimmed = String(value ?? "").trim();
+  const hex = trimmed.match(/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+
+  if (hex) {
+    const raw = hex[1];
+    const expanded = raw.length <= 4 ? raw.split("").map((character) => character + character).join("") : raw;
+    return {
+      r: parseInt(expanded.slice(0, 2), 16),
+      g: parseInt(expanded.slice(2, 4), 16),
+      b: parseInt(expanded.slice(4, 6), 16),
+      a: expanded.length === 8 ? parseInt(expanded.slice(6, 8), 16) / 255 : 1,
+    };
+  }
+
+  const rgb = trimmed.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgb) {
+    const parts = rgb[1].split(",").map((part) => part.trim());
+    if (parts.length >= 3) {
+      return {
+        r: clamp(Math.round(Number(parts[0])), 0, 255),
+        g: clamp(Math.round(Number(parts[1])), 0, 255),
+        b: clamp(Math.round(Number(parts[2])), 0, 255),
+        a: parts.length >= 4 ? clamp(Number(parts[3]), 0, 1) : 1,
+      };
+    }
+  }
+
+  return fallback;
+}
+
+function inverseOrthographicPoint(
+  xEast,
+  yNorth,
+  rhoSquared,
+  centerLatRad,
+  centerLonRad,
+  sinCenterLat,
+  cosCenterLat,
+) {
+  if (rhoSquared < 1e-12) {
+    return {
+      lat: centerLatRad * 180 / Math.PI,
+      lon: wrapLongitude(centerLonRad * 180 / Math.PI),
+    };
+  }
+
+  const rho = Math.sqrt(rhoSquared);
+  const angularDistance = Math.asin(Math.min(1, rho));
+  const sinDistance = Math.sin(angularDistance);
+  const cosDistance = Math.cos(angularDistance);
+  const latRad = Math.asin(
+    cosDistance * sinCenterLat + (yNorth * sinDistance * cosCenterLat) / rho,
+  );
+  const lonRad = centerLonRad + Math.atan2(
+    xEast * sinDistance,
+    rho * cosCenterLat * cosDistance - yNorth * sinCenterLat * sinDistance,
+  );
+
+  return {
+    lat: latRad * 180 / Math.PI,
+    lon: wrapLongitude(lonRad * 180 / Math.PI),
+  };
+}
+
+function sampleWorldHighTexture(source, sourceWidth, sourceHeight, lat, lon) {
+  const svgX = ((wrapLongitude(lon) + 180) / 360) * WORLD_HIGH_MERCATOR_SIZE;
+  const sinLat = Math.sin(degreesToRadians(clamp(lat, -WORLD_HIGH_LAT_LIMIT, WORLD_HIGH_LAT_LIMIT)));
+  const svgY =
+    (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) *
+    WORLD_HIGH_MERCATOR_SIZE;
+  const textureX = ((svgX - WORLD_HIGH_VIEWBOX.x) / WORLD_HIGH_VIEWBOX.width) * (sourceWidth - 1);
+  const textureY = ((svgY - WORLD_HIGH_VIEWBOX.y) / WORLD_HIGH_VIEWBOX.height) * (sourceHeight - 1);
+
+  if (textureY < 0 || textureY >= sourceHeight) return null;
+
+  const x = Math.floor(modulo(textureX, sourceWidth));
+  const y = Math.round(clamp(textureY, 0, sourceHeight - 1));
+  const index = (y * sourceWidth + x) * 4;
+  const alpha = source[index + 3] / 255;
+  if (alpha < 0.04) return null;
+
+  const brightness = (source[index] + source[index + 1] + source[index + 2]) / 765;
+  return {
+    alpha,
+    isBorder: brightness > 0.92,
+  };
 }
 
 function projectLatLon(lat, lon, zoom) {
@@ -1094,6 +1947,18 @@ function wrapLongitude(lon) {
 
 function clampZoom(zoom) {
   return Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+}
+
+function clampZoomForView(zoom, viewMode) {
+  return viewMode === "globe" ? Math.max(GLOBE_MIN_ZOOM, Math.min(GLOBE_MAX_ZOOM, zoom)) : clampZoom(zoom);
+}
+
+function degreesToRadians(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function normalizeRadians(radians) {
+  return ((radians + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 }
 
 function clamp(value, min, max) {

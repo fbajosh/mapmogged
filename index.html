@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div class="top-actions">
+      <div id="uploadSection" class="top-actions">
         <button
           id="uploadButton"
           class="upload-button"
@@ -41,82 +41,35 @@
         >
           <span id="fileLabel">Upload</span>
         </button>
-        <input
-          id="timelineFile"
-          class="file-input"
-          type="file"
-          accept=".json,.csv,application/json,text/csv"
-          multiple
-        />
-
-        <div class="process-split" role="group" aria-label="Process upload">
-          <button id="processButton" class="process-main" type="button" disabled>Process</button>
-          <button
-            id="settingsToggleButton"
-            class="process-advanced"
-            type="button"
-            aria-label="Advanced settings"
-            aria-expanded="false"
-            aria-controls="settingsPanel"
-            title="Advanced settings"
-          >
-            <span class="process-caret" aria-hidden="true"></span>
-          </button>
-        </div>
       </div>
-
-      <section id="settingsPanel" class="processing-settings" hidden>
-        <div class="layer-controls defaults-controls">
-          <div class="layer-span-6">
-            <span>Mode</span>
-            <div class="segmented-control layer-segmented-control">
-              <label>
-                <input type="radio" name="mapMode" value="points" checked />
-                <span>Points</span>
-              </label>
-              <label>
-                <input type="radio" name="mapMode" value="route" />
-                <span>Route</span>
-              </label>
-            </div>
-          </div>
-          <div class="layer-span-3 color-control">
-            <span>Color</span>
-            <div class="color-input-row">
-              <input id="layerColor" type="color" value="#2563eb" aria-label="Default layer color" />
-              <div class="color-presets" data-color-presets></div>
-            </div>
-          </div>
-          <label class="layer-span-3">
-            <span>Width</span>
-            <input id="styleSize" type="number" min="1" max="12" step="0.5" value="2.5" />
-          </label>
-          <label class="layer-span-4">
-            <span>Precision</span>
-            <input id="roundDigits" type="number" min="1" max="7" step="1" value="4" />
-          </label>
-          <label class="layer-span-4">
-            <span>Min speed</span>
-            <input id="minSpeed" type="number" min="0" step="0.1" value="0.5" />
-          </label>
-          <label class="layer-span-4">
-            <span>Max speed</span>
-            <input id="maxSpeed" type="number" min="1" step="10" value="500" />
-          </label>
-        </div>
-      </section>
+      <input
+        id="timelineFile"
+        class="file-input"
+        type="file"
+        accept=".json,.csv,application/json,text/csv"
+        multiple
+      />
 
       <div id="layerSection" class="layer-section" hidden>
         <div class="layer-section-header">
           <span>Layers</span>
-          <button
-            id="clearLayersButton"
-            class="panel-icon-button"
-            type="button"
-            aria-label="Clear all layers"
-            title="Clear all layers"
-            disabled
-          ></button>
+          <div class="layer-header-actions">
+            <button
+              id="addLayerButton"
+              class="panel-icon-button"
+              type="button"
+              aria-label="Add layer"
+              title="Add layer"
+            ></button>
+            <button
+              id="clearLayersButton"
+              class="panel-icon-button"
+              type="button"
+              aria-label="Clear all layers"
+              title="Clear all layers"
+              disabled
+            ></button>
+          </div>
         </div>
         <div id="layerList" class="layer-list"></div>
       </div>
@@ -140,7 +93,7 @@
         </div>
         <ul>
           <li>Click Upload and choose one or more Google Timeline JSON files and/or manual CSV files</li>
-          <li>Each will interpretted as its own layer, so overlapping dates may exist</li>
+          <li>Each is interpreted as its own layer, so overlapping dates may exist</li>
           <li>All processing is done locally on your computer - no information entered is communicated back to the server</li>
           <li>You do not need to change the Google JSON file before uploading</li>
         </ul>
@@ -151,9 +104,9 @@
         </ul>
         <br>
         <ul>  
-          <li>Once files are added, click Process</li>
-          <li>You may adjust the processing settings by clicking the the split</li>
-          <li>You can also reprocess a layer and adjust the settings after uploading</li>
+          <li>Files process automatically after upload</li>
+          <li>Use the add icon in Layers to upload more files</li>
+          <li>You can adjust layer settings and reprocess after uploading</li>
         </ul>
       </div>
     </div>
