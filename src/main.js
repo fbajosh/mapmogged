@@ -680,6 +680,8 @@ function createColorControl(label, value, onChange, className = "") {
 }
 
 function createColorSwatchGroup(input, onChange = () => {}) {
+  if (!input) return document.createElement("div");
+
   const group = document.createElement("div");
   group.className = "color-presets";
   group.dataset.colorPresets = "";
@@ -719,6 +721,11 @@ function createColorSwatchGroup(input, onChange = () => {}) {
 }
 
 function setColorInputValue(input, color, onChange) {
+  if (!input) {
+    console.warn("setColorInputValue called without input");
+    return;
+  }
+
   input.value = color;
   onChange(color);
 
