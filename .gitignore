@@ -3,3 +3,4 @@ timeline.json
 node_modules/
 timeline.csv
 **/.DS_Store
+dist/

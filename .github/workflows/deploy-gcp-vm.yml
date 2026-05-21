@@ -1,0 +1,69 @@
+name: Deploy to GCP VM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: gcp-vm-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      GCP_VM_HOST: ${{ secrets.GCP_VM_HOST }}
+      GCP_VM_USER: ${{ secrets.GCP_VM_USER }}
+      GCP_VM_PORT: ${{ secrets.GCP_VM_PORT }}
+      GCP_DEPLOY_PATH: ${{ secrets.GCP_DEPLOY_PATH }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set deployment defaults
+        run: |
+          echo "SSH_PORT=${GCP_VM_PORT:-22}" >> "$GITHUB_ENV"
+          echo "DEPLOY_PATH=${GCP_DEPLOY_PATH:-/opt/bitnami/apache/htdocs/mapstimeline}" >> "$GITHUB_ENV"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test
+        run: npm test
+
+      - name: Build static bundle
+        run: npm run build
+
+      - name: Configure SSH
+        run: |
+          test -n "$GCP_VM_HOST" || (echo "::error::Missing GCP_VM_HOST secret" && exit 1)
+          test -n "$GCP_VM_USER" || (echo "::error::Missing GCP_VM_USER secret" && exit 1)
+          test -n "${{ secrets.GCP_VM_SSH_KEY }}" || (echo "::error::Missing GCP_VM_SSH_KEY secret" && exit 1)
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.GCP_VM_SSH_KEY }}" | tr -d '\r' > ~/.ssh/gcp_vm_key
+          chmod 600 ~/.ssh/gcp_vm_key
+          ssh-keyscan -p "$SSH_PORT" -H "$GCP_VM_HOST" >> ~/.ssh/known_hosts
+
+      - name: Validate deploy path
+        run: |
+          test -n "$DEPLOY_PATH" || (echo "::error::DEPLOY_PATH is empty" && exit 1)
+          test "$DEPLOY_PATH" != "/" || (echo "::error::DEPLOY_PATH cannot be /" && exit 1)
+
+      - name: Prepare remote deploy path
+        run: |
+          ssh -i ~/.ssh/gcp_vm_key -p "$SSH_PORT" "$GCP_VM_USER@$GCP_VM_HOST" \
+            "mkdir -p \"$DEPLOY_PATH\""
+
+      - name: Deploy static bundle
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/gcp_vm_key -p $SSH_PORT" \
+            dist/ "$GCP_VM_USER@$GCP_VM_HOST:$DEPLOY_PATH/"
