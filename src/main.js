@@ -7,6 +7,11 @@ const LOAD_CENTER_ZOOM = 4;
 const SAMPLE_CENTER_LIMIT = 10000;
 const ZOOM_BUTTON_STEP = 0.5;
 const WHEEL_ZOOM_SENSITIVITY = 0.003;
+const PINCH_MIN_DISTANCE_PX = 24;
+const TAP_MAX_DURATION_MS = 280;
+const TAP_MAX_DISTANCE_PX = 12;
+const DOUBLE_TAP_DELAY_MS = 320;
+const DOUBLE_TAP_DISTANCE_PX = 48;
 const MAX_LATITUDE = 85.05112878;
 const GLOBE_MIN_ZOOM = 2;
 const GLOBE_MAX_ZOOM = 7;
@@ -35,6 +40,12 @@ const BASE_COLOR_HUES = [221.21212121212122, 141.21212121212122, 1.2121212121212
 const BASE_COLOR_SATURATION = 0.8319327731092435;
 const BASE_COLOR_LIGHTNESS = 0.5333333333333333;
 const BASE_LAYER_COLORS = ["#2563eb", "#25eb6b", "#eb2925"];
+const SPEED_UNITS = [
+  { id: "mph", label: "mph", fieldLabel: "mph", multiplier: 2.2369362920544, step: 0.1 },
+  { id: "kmh", label: "km/h", fieldLabel: "km/h", multiplier: 3.6, step: 0.1 },
+  { id: "mps", label: "m/s", fieldLabel: "m/s", multiplier: 1, step: 0.1 },
+  { id: "knots", label: "knots", fieldLabel: "kts", multiplier: 1.9438444924406, step: 0.1 },
+];
 const MAP_STYLES = [
   {
     id: "standard",
@@ -96,9 +107,19 @@ const CODICON_PATHS = {
       d: "M8 1.5C8 1.22386 7.77614 1 7.5 1C7.22386 1 7 1.22386 7 1.5V7H1.5C1.22386 7 1 7.22386 1 7.5C1 7.77614 1.22386 8 1.5 8H7V13.5C7 13.7761 7.22386 14 7.5 14C7.77614 14 8 13.7761 8 13.5V8H13.5C13.7761 8 14 7.77614 14 7.5C14 7.22386 13.7761 7 13.5 7H8V1.5Z",
     },
   ],
-  eyeClosed: [
+  chevronDown: [
     {
-      d: "M10.1196 10.8267L14.1464 14.8536C14.3417 15.0488 14.6583 15.0488 14.8536 14.8536C15.0488 14.6583 15.0488 14.3417 14.8536 14.1464L1.85355 1.14645C1.65829 0.951184 1.34171 0.951184 1.14645 1.14645C0.951184 1.34171 0.951184 1.65829 1.14645 1.85355L4.37624 5.08334C3.90117 5.4183 3.5126 5.80026 3.19877 6.18295C2.75443 6.72477 2.46154 7.26493 2.27931 7.66977C2.18795 7.87274 2.12369 8.04329 2.08166 8.1653C2.06063 8.22636 2.03453 8.31047 2.03453 8.31047L2.01687 8.37186C2.01687 8.37186 1.94098 8.86907 2.37202 8.9833C2.63879 9.05404 2.91251 8.8948 2.98346 8.62815L2.98444 8.62471L2.99179 8.5997C2.9989 8.57616 3.01051 8.53927 3.02715 8.49095C3.06047 8.39421 3.11375 8.25227 3.19119 8.08023C3.34655 7.73507 3.59627 7.27523 3.97201 6.81706C4.26363 6.46146 4.63213 6.10494 5.09595 5.80306L6.67356 7.38067C5.9688 7.82277 5.50024 8.60667 5.50024 9.5C5.50024 10.8807 6.61953 12 8.00024 12C8.89358 12 9.67747 11.5314 10.1196 10.8267ZM9.3807 10.0878C9.15205 10.6241 8.62005 11 8.00024 11C7.17182 11 6.50024 10.3284 6.50024 9.5C6.50024 8.88019 6.87616 8.34819 7.41244 8.11955L9.3807 10.0878ZM6.31962 4.19853L7.174 5.05291C7.43366 5.01852 7.70875 5 8.00017 5C10.0445 5 11.2857 5.9115 12.0283 6.81706C12.4041 7.27523 12.6538 7.73507 12.8091 8.08023C12.8866 8.25227 12.9399 8.39421 12.9732 8.49095C12.9898 8.53927 13.0014 8.57616 13.0085 8.5997L13.0159 8.62471L13.0169 8.62815L13.0172 8.62937C13.0885 8.89555 13.3618 9.05397 13.6283 8.9833C13.8952 8.91253 14.0542 8.63878 13.9835 8.37186L13.9832 8.37069L13.9827 8.36916L13.9816 8.365L13.9781 8.35236C13.9752 8.34204 13.9711 8.328 13.9658 8.31047C13.9552 8.27541 13.9397 8.22636 13.9187 8.1653C13.8766 8.04329 13.8124 7.87274 13.721 7.66977C13.5388 7.26493 13.2459 6.72477 12.8016 6.18295C11.904 5.0885 10.3952 4 8.00017 4C7.38264 4 6.82403 4.07236 6.31962 4.19853Z",
+      d: "M3.14598 5.85423L7.64598 10.3542C7.84098 10.5492 8.15798 10.5492 8.35298 10.3542L12.853 5.85423C13.048 5.65923 13.048 5.34223 12.853 5.14723C12.658 4.95223 12.341 4.95223 12.146 5.14723L7.99998 9.29323L3.85398 5.14723C3.65898 4.95223 3.34198 4.95223 3.14698 5.14723C2.95198 5.34223 2.95098 5.65923 3.14598 5.85423Z",
+    },
+  ],
+  chevronLeft: [
+    {
+      d: "M9.14601 3.14623L4.64601 7.64623C4.45101 7.84123 4.45101 8.15823 4.64601 8.35323L9.14601 12.8532C9.34101 13.0482 9.65801 13.0482 9.85301 12.8532C10.048 12.6582 10.048 12.3412 9.85301 12.1462L5.70701 8.00023L9.85301 3.85423C10.048 3.65923 10.048 3.34223 9.85301 3.14723C9.65801 2.95223 9.34101 2.95223 9.14601 3.14723V3.14623Z",
+    },
+  ],
+  chevronUp: [
+    {
+      d: "M3.14603 9.85423C3.34103 10.0492 3.65803 10.0492 3.85303 9.85423L7.99903 5.70823L12.145 9.85423C12.34 10.0492 12.657 10.0492 12.852 9.85423C13.047 9.65923 13.047 9.34223 12.852 9.14723L8.35203 4.64723C8.15703 4.45223 7.84003 4.45223 7.64503 4.64723L3.14503 9.14723C2.95003 9.34223 2.95103 9.65923 3.14603 9.85423Z",
     },
   ],
   question: [
@@ -130,6 +151,11 @@ const CODICON_PATHS = {
       d: "M2.146 9.4873L8 13.0003L13.854 9.4873C13.946 9.6413 14 9.8173 14 10.0003C14 10.3493 13.814 10.6783 13.514 10.8583L8.514 13.8573C8.357 13.9513 8.181 14.0003 8 14.0003C7.819 14.0003 7.642 13.9513 7.486 13.8583L2.486 10.8573C2.187 10.6793 2 10.3503 2 10.0003C2 9.8163 2.054 9.6403 2.146 9.4873Z",
     },
   ],
+  symbolRuler: [
+    {
+      d: "M10.9999 3.4997C10.9999 2.67127 10.3284 1.99969 9.49994 1.99969H6.49994C5.67151 1.99969 4.99994 2.67127 4.99994 3.49969V12.5003C4.99994 13.3287 5.67151 14.0003 6.49994 14.0003H9.49994C10.3284 14.0003 10.9999 13.3287 10.9999 12.5003L10.9999 3.4997ZM9.49994 2.99969C9.77608 2.9997 9.99994 3.22355 9.99994 3.4997L9.99994 12.5003C9.99994 12.7764 9.77608 13.0003 9.49994 13.0003H6.49994C6.2238 13.0003 5.99994 12.7764 5.99994 12.5003V11H7.49997C7.77611 11 7.99997 10.7761 7.99997 10.5C7.99997 10.2238 7.77611 9.99997 7.49997 9.99997H5.99997L5.99994 8.49997C5.99993 8.49997 5.99995 8.49997 5.99994 8.49997H7.99997C8.27611 8.49997 8.49997 8.27611 8.49997 7.99997C8.49997 7.72383 8.27611 7.49997 7.99997 7.49997H5.99997C5.99996 7.49997 5.99998 7.49997 5.99997 7.49997L5.99994 5.99997H7.49997C7.77611 5.99997 7.99997 5.77611 7.99997 5.49997C7.99997 5.22383 7.77611 4.99997 7.49997 4.99997H5.99997L5.99994 3.49969C5.99994 3.22355 6.2238 2.99969 6.49994 2.99969L9.49994 2.99969Z",
+    },
+  ],
   symbolColor: [
     {
       d: "M8.00101 1C4.13401 1 1.00101 3.8 1.00101 7.667C1.00101 8.956 2.04501 10 3.33401 10C4.75101 10 4.72101 9 6.00001 9C6.64401 9 7.00001 9.606 7.00001 10.25V11.5C7.00001 13.433 8.56701 15 10.5 15C13.653 15 14.999 11.215 14.999 8C14.999 4.134 11.866 1 8.00001 1H8.00101ZM10.5 14C9.12201 14 8.00001 12.878 8.00001 11.5V10.25C8.00001 8.967 7.14001 8 6.00001 8C5.04001 8 4.49801 8.412 4.13901 8.685C3.85401 8.902 3.72401 9 3.33401 9C2.59901 9 2.00101 8.402 2.00101 7.667C2.00101 4.436 4.58001 2 8.00101 2C11.309 2 14 4.692 14 8C14 10.412 13.068 14 10.501 14H10.5ZM12 11C12 11.552 11.552 12 11 12C10.448 12 10 11.552 10 11C10 10.448 10.448 10 11 10C11.552 10 12 10.448 12 11ZM13 8C13 8.552 12.552 9 12 9C11.448 9 11 8.552 11 8C11 7.448 11.448 7 12 7C12.552 7 13 7.448 13 8ZM6.00001 5C6.00001 5.552 5.55201 6 5.00001 6C4.44801 6 4.00001 5.552 4.00001 5C4.00001 4.448 4.44801 4 5.00001 4C5.55201 4 6.00001 4.448 6.00001 5ZM10 5C10 4.448 10.448 4 11 4C11.552 4 12 4.448 12 5C12 5.552 11.552 6 11 6C10.448 6 10 5.552 10 5ZM9.00001 4C9.00001 4.552 8.55201 5 8.00001 5C7.44801 5 7.00001 4.552 7.00001 4C7.00001 3.448 7.44801 3 8.00001 3C8.55201 3 9.00001 3.448 9.00001 4Z",
@@ -143,6 +169,8 @@ const elements = {
   fileLabel: document.querySelector("#fileLabel"),
   uploadButton: document.querySelector("#uploadButton"),
   helpButton: document.querySelector("#helpButton"),
+  speedUnitButton: document.querySelector("#speedUnitButton"),
+  speedUnitMenu: document.querySelector("#speedUnitMenu"),
   instructionsModal: document.querySelector("#instructionsModal"),
   closeInstructionsButton: document.querySelector("#closeInstructionsButton"),
   minimizeButton: document.querySelector("#minimizeButton"),
@@ -159,16 +187,20 @@ let processQueue = [];
 let activeProcessingLayer = null;
 let nextLayerId = 1;
 let timelineMap = null;
+let displaySpeedUnitId = "mph";
 let defaultSettings = {
   mode: "points",
-  minSpeed: 0.5,
-  maxSpeed: 500,
+  minSpeed: 0.44704,
+  maxSpeed: 447.04,
   precision: 4,
   size: 2.5,
 };
 
-setupPanelIconButton(elements.minimizeButton, "eyeClosed", "Minimize controls");
+setupPanelIconButton(elements.minimizeButton, "chevronLeft", "Minimize controls");
 setupPanelIconButton(elements.helpButton, "question", "Open instructions");
+setupPanelIconButton(elements.speedUnitButton, "symbolRuler", "Speed unit: mph");
+renderSpeedUnitMenu();
+updateSpeedUnitButton();
 setupPanelIconButton(elements.closeInstructionsButton, "close", "Close instructions");
 setupPanelIconButton(elements.addLayerButton, "add", "Add layer");
 setupPanelIconButton(elements.clearLayersButton, "clearAll", "Clear all layers");
@@ -181,7 +213,14 @@ elements.fileInput.addEventListener("change", () => {
   updateUploadButtonMeta();
   processSelectedFiles();
 });
-elements.helpButton.addEventListener("click", () => setInstructionsVisible(true));
+elements.helpButton.addEventListener("click", () => {
+  setSpeedUnitMenuVisible(false);
+  setInstructionsVisible(true);
+});
+elements.speedUnitButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSpeedUnitMenuVisible(elements.speedUnitMenu.hidden);
+});
 elements.closeInstructionsButton.addEventListener("click", () => setInstructionsVisible(false));
 elements.instructionsModal.addEventListener("click", (event) => {
   if (event.target === elements.instructionsModal) {
@@ -189,13 +228,36 @@ elements.instructionsModal.addEventListener("click", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !elements.instructionsModal.hidden) {
+  if (event.key !== "Escape") return;
+
+  if (!elements.instructionsModal.hidden) {
     setInstructionsVisible(false);
   }
+
+  if (!elements.speedUnitMenu.hidden) {
+    setSpeedUnitMenuVisible(false);
+  }
 });
-elements.minimizeButton.addEventListener("click", () => setPanelCollapsed(true));
+elements.minimizeButton.addEventListener("click", () => {
+  setSpeedUnitMenuVisible(false);
+  setPanelCollapsed(true);
+});
 elements.restoreButton.addEventListener("click", () => setPanelCollapsed(false));
 elements.clearLayersButton.addEventListener("click", clearAllLayers);
+document.addEventListener("click", (event) => {
+  if (
+    !elements.speedUnitMenu.hidden &&
+    !elements.speedUnitButton.contains(event.target) &&
+    !elements.speedUnitMenu.contains(event.target)
+  ) {
+    setSpeedUnitMenuVisible(false);
+  }
+});
+window.addEventListener("resize", () => {
+  if (!elements.speedUnitMenu.hidden) {
+    positionSpeedUnitMenu();
+  }
+});
 
 renderLayerList();
 
@@ -233,6 +295,7 @@ function createUploadLayer(file) {
     precision: defaultSettings.precision,
     size: defaultSettings.size,
     color: getLayerCycleColor(id - 1),
+    isCollapsed: false,
     status: "queued",
     progress: 0,
     stats: null,
@@ -492,6 +555,65 @@ function setInstructionsVisible(isVisible) {
   elements.instructionsModal.hidden = !isVisible;
 }
 
+function renderSpeedUnitMenu() {
+  const fragment = document.createDocumentFragment();
+
+  for (const unit of SPEED_UNITS) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "speed-unit-option";
+    button.setAttribute("role", "menuitemradio");
+    button.setAttribute("aria-checked", String(unit.id === displaySpeedUnitId));
+    button.classList.toggle("is-active", unit.id === displaySpeedUnitId);
+    button.textContent = unit.label;
+    button.addEventListener("click", () => setDisplaySpeedUnit(unit.id));
+    fragment.append(button);
+  }
+
+  elements.speedUnitMenu.replaceChildren(fragment);
+}
+
+function setDisplaySpeedUnit(unitId) {
+  if (!SPEED_UNITS.some((unit) => unit.id === unitId)) return;
+
+  displaySpeedUnitId = unitId;
+  renderSpeedUnitMenu();
+  updateSpeedUnitButton();
+  setSpeedUnitMenuVisible(false);
+  renderLayerList();
+}
+
+function setSpeedUnitMenuVisible(isVisible) {
+  if (isVisible) {
+    positionSpeedUnitMenu();
+  }
+
+  elements.speedUnitMenu.hidden = !isVisible;
+  elements.speedUnitButton.setAttribute("aria-expanded", String(isVisible));
+}
+
+function positionSpeedUnitMenu() {
+  const buttonRect = elements.speedUnitButton.getBoundingClientRect();
+  const menuWidth = Math.max(elements.speedUnitMenu.offsetWidth, 76);
+  const left = Math.min(window.innerWidth - menuWidth - 8, Math.max(8, buttonRect.left));
+  elements.speedUnitMenu.style.left = left + "px";
+  elements.speedUnitMenu.style.top = buttonRect.bottom + 6 + "px";
+}
+
+function updateSpeedUnitButton() {
+  const unit = getDisplaySpeedUnit();
+  const label = "Speed unit: " + unit.label;
+  elements.speedUnitButton.title = label;
+  elements.speedUnitButton.setAttribute("aria-label", label);
+  elements.speedUnitButton.setAttribute("aria-haspopup", "menu");
+  elements.speedUnitButton.setAttribute("aria-controls", "speedUnitMenu");
+  elements.speedUnitButton.setAttribute("aria-expanded", String(!elements.speedUnitMenu.hidden));
+}
+
+function getDisplaySpeedUnit() {
+  return SPEED_UNITS.find((unit) => unit.id === displaySpeedUnitId) ?? SPEED_UNITS.find((unit) => unit.id === "mps");
+}
+
 function renderSettingsControls(container, { modeName, values, onChange }) {
   container.replaceChildren(
     createSegmentedControl(modeName, "Mode", values.mode, [
@@ -501,14 +623,15 @@ function renderSettingsControls(container, { modeName, values, onChange }) {
     createColorControl("Color", values.color, (value) => onChange("color", value), "layer-span-3"),
     createNumberControl("Width", values.size, 1, 12, 0.5, (value) => onChange("size", value), "layer-span-3"),
     createNumberControl("Precision", values.precision, 1, 7, 1, (value) => onChange("precision", value), "layer-span-4"),
-    createNumberControl("Min speed", values.minSpeed, 0, 1000, 0.1, (value) => onChange("minSpeed", value), "layer-span-4"),
-    createNumberControl("Max speed", values.maxSpeed, 1, 5000, 10, (value) => onChange("maxSpeed", value), "layer-span-4"),
+    createSpeedControl("Min Speed", values.minSpeed, 0, 1000, (value) => onChange("minSpeed", value), "layer-span-4", "min"),
+    createSpeedControl("Max Speed", values.maxSpeed, 1, 5000, (value) => onChange("maxSpeed", value), "layer-span-4", "max"),
   );
 }
 
 function createLayerCard(layer) {
   const card = document.createElement("div");
   card.className = "layer-card";
+  card.classList.toggle("is-collapsed", Boolean(layer.isCollapsed));
 
   const header = document.createElement("div");
   header.className = "layer-card-header";
@@ -529,6 +652,16 @@ function createLayerCard(layer) {
   const actionGroup = document.createElement("div");
   actionGroup.className = "layer-actions";
 
+  const collapseButton = createIconButton(
+    layer.isCollapsed ? "chevronDown" : "chevronUp",
+    layer.isCollapsed ? "Expand layer" : "Collapse layer",
+  );
+  collapseButton.setAttribute("aria-expanded", String(!layer.isCollapsed));
+  collapseButton.addEventListener("click", () => {
+    layer.isCollapsed = !layer.isCollapsed;
+    renderLayerList();
+  });
+
   const reprocessButton = createIconButton("refresh", "Reprocess layer");
   reprocessButton.disabled = layer.status === "processing";
   reprocessButton.addEventListener("click", () => {
@@ -542,8 +675,13 @@ function createLayerCard(layer) {
     deleteLayer(layer);
   });
 
-  actionGroup.append(reprocessButton, deleteButton);
+  actionGroup.append(collapseButton, reprocessButton, deleteButton);
   header.append(textWrap, actionGroup);
+  card.append(header);
+
+  if (layer.isCollapsed) {
+    return card;
+  }
 
   const controls = document.createElement("div");
   controls.className = "layer-controls";
@@ -585,7 +723,7 @@ function createLayerCard(layer) {
     },
   });
 
-  card.append(header, controls);
+  card.append(controls);
   return card;
 }
 
@@ -857,6 +995,56 @@ function createNumberControl(label, value, min, max, step, onChange, className =
   return wrapper;
 }
 
+function createSpeedControl(label, valueMps, minMps, maxMps, onChange, className = "", formatMode = "min") {
+  const unit = getDisplaySpeedUnit();
+  const wrapper = document.createElement("label");
+  wrapper.className = ["speed-control", className].filter(Boolean).join(" ");
+
+  const text = document.createElement("span");
+  text.textContent = label + " (" + unit.fieldLabel + ")";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "decimal";
+  input.value = formatSpeedInput(convertSpeedFromMps(valueMps, unit), formatMode);
+  input.addEventListener("change", () => {
+    const next = parseSpeedInput(input.value);
+    if (!Number.isFinite(next)) {
+      input.value = formatSpeedInput(convertSpeedFromMps(valueMps, unit), formatMode);
+      return;
+    }
+
+    const nextMps = convertSpeedToMps(next, unit);
+    const clamped = Math.max(minMps, Math.min(maxMps, nextMps));
+    input.value = formatSpeedInput(convertSpeedFromMps(clamped, unit), formatMode);
+    onChange(clamped);
+  });
+
+  wrapper.append(text, input);
+  return wrapper;
+}
+
+function convertSpeedFromMps(valueMps, unit = getDisplaySpeedUnit()) {
+  return valueMps * unit.multiplier;
+}
+
+function convertSpeedToMps(value, unit = getDisplaySpeedUnit()) {
+  return value / unit.multiplier;
+}
+
+function parseSpeedInput(value) {
+  const normalized = String(value).replace(/,/g, "").trim();
+  return normalized ? Number(normalized) : NaN;
+}
+
+function formatSpeedInput(value, mode = "min") {
+  const options =
+    mode === "max"
+      ? { maximumFractionDigits: 0 }
+      : { minimumFractionDigits: 1, maximumFractionDigits: 1 };
+  return value.toLocaleString("en-US", options);
+}
+
 function getLayerMeta(layer) {
   if (layer.status === "error") {
     return `Error: ${layer.error}`;
@@ -1062,6 +1250,10 @@ class TimelineMap {
     this.globeBasemap = new GlobeBasemapTexture(GLOBE_BASEMAP_SOURCE);
     this.frame = null;
     this.drag = null;
+    this.pinch = null;
+    this.activePointers = new Map();
+    this.lastTap = null;
+    this.lastTouchDoubleTapTime = 0;
 
     this.container.append(this.tilePane, this.overlay, this.controls, this.attribution);
     this.bindEvents();
@@ -1207,58 +1399,10 @@ class TimelineMap {
       }
     });
 
-    this.container.addEventListener("pointerdown", (event) => {
-      if (event.target.closest(".map-controls")) return;
-      this.container.setPointerCapture(event.pointerId);
-      this.container.classList.add("is-dragging");
-
-      if (this.viewMode === "globe") {
-        const geometry = this.getGlobeGeometry(this.container.clientWidth, this.container.clientHeight);
-        this.drag = {
-          mode: "globe",
-          pointerId: event.pointerId,
-          x: event.clientX,
-          y: event.clientY,
-          lat: this.center.lat,
-          lon: this.center.lon,
-          degreesPerPixel: 180 / Math.PI / geometry.radius,
-        };
-        return;
-      }
-
-      this.drag = {
-        mode: "flat",
-        pointerId: event.pointerId,
-        x: event.clientX,
-        y: event.clientY,
-        center: projectLatLon(this.center.lat, this.center.lon, this.zoom),
-      };
-    });
-
-    this.container.addEventListener("pointermove", (event) => {
-      if (!this.drag || this.drag.pointerId !== event.pointerId) return;
-      const dx = event.clientX - this.drag.x;
-      const dy = event.clientY - this.drag.y;
-
-      if (this.drag.mode === "globe") {
-        this.center = {
-          lat: clamp(this.drag.lat + dy * this.drag.degreesPerPixel, -89.5, 89.5),
-          lon: wrapLongitude(this.drag.lon - dx * this.drag.degreesPerPixel),
-        };
-        this.render();
-        return;
-      }
-
-      const nextCenter = {
-        x: this.drag.center.x - dx,
-        y: this.drag.center.y - dy,
-      };
-      this.center = unprojectPoint(nextCenter, this.zoom);
-      this.render();
-    });
-
-    this.container.addEventListener("pointerup", (event) => this.endDrag(event.pointerId));
-    this.container.addEventListener("pointercancel", (event) => this.endDrag(event.pointerId));
+    this.container.addEventListener("pointerdown", (event) => this.handlePointerDown(event));
+    this.container.addEventListener("pointermove", (event) => this.handlePointerMove(event));
+    this.container.addEventListener("pointerup", (event) => this.handlePointerEnd(event, true));
+    this.container.addEventListener("pointercancel", (event) => this.handlePointerEnd(event, false));
     this.container.addEventListener(
       "wheel",
       (event) => {
@@ -1270,14 +1414,241 @@ class TimelineMap {
     );
     this.container.addEventListener("dblclick", (event) => {
       event.preventDefault();
+      if (Date.now() - this.lastTouchDoubleTapTime < 700) return;
       this.zoomAround(event.clientX, event.clientY, 1);
     });
   }
 
-  endDrag(pointerId) {
-    if (!this.drag || this.drag.pointerId !== pointerId) return;
+  handlePointerDown(event) {
+    if (event.button !== 0 || event.target.closest(".map-controls")) return;
+    event.preventDefault();
+
+    try {
+      this.container.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture can fail if the browser cancels the touch before this handler runs.
+    }
+
+    const pointer = {
+      id: event.pointerId,
+      pointerType: event.pointerType,
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: performance.now(),
+      suppressTap: false,
+    };
+    this.activePointers.set(event.pointerId, pointer);
+    this.container.classList.add("is-dragging");
+
+    if (this.activePointers.size >= 2) {
+      for (const activePointer of this.activePointers.values()) {
+        activePointer.suppressTap = true;
+      }
+      this.startPinchGesture();
+      return;
+    }
+
+    this.startSinglePointerDrag(pointer);
+  }
+
+  handlePointerMove(event) {
+    const pointer = this.activePointers.get(event.pointerId);
+    if (!pointer) return;
+    event.preventDefault();
+
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+
+    if (this.activePointers.size >= 2) {
+      this.updatePinchGesture();
+      return;
+    }
+
+    this.updateSinglePointerDrag(pointer);
+  }
+
+  handlePointerEnd(event, allowTap) {
+    const pointer = this.activePointers.get(event.pointerId);
+    const wasPinching = this.pinch !== null || this.activePointers.size > 1;
+
+    if (pointer) {
+      pointer.x = event.clientX;
+      pointer.y = event.clientY;
+    }
+
+    this.activePointers.delete(event.pointerId);
+
+    try {
+      this.container.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore release failures for pointer streams that were already canceled.
+    }
+
+    if (allowTap && pointer && !wasPinching && this.activePointers.size === 0) {
+      this.handleTap(pointer);
+    }
+
+    if (this.activePointers.size >= 2) {
+      for (const activePointer of this.activePointers.values()) {
+        activePointer.suppressTap = true;
+      }
+      this.startPinchGesture();
+      return;
+    }
+
+    if (this.activePointers.size === 1) {
+      const [remainingPointer] = this.activePointers.values();
+      remainingPointer.suppressTap = true;
+      this.startSinglePointerDrag(remainingPointer, true);
+      return;
+    }
+
     this.drag = null;
+    this.pinch = null;
     this.container.classList.remove("is-dragging");
+  }
+
+  startSinglePointerDrag(pointer, resetStart = false) {
+    if (resetStart) {
+      pointer.startX = pointer.x;
+      pointer.startY = pointer.y;
+      pointer.startTime = performance.now();
+    }
+
+    this.pinch = null;
+
+    if (this.viewMode === "globe") {
+      const geometry = this.getGlobeGeometry(this.container.clientWidth, this.container.clientHeight);
+      this.drag = {
+        mode: "globe",
+        pointerId: pointer.id,
+        x: pointer.x,
+        y: pointer.y,
+        lat: this.center.lat,
+        lon: this.center.lon,
+        degreesPerPixel: 180 / Math.PI / geometry.radius,
+      };
+      return;
+    }
+
+    this.drag = {
+      mode: "flat",
+      pointerId: pointer.id,
+      x: pointer.x,
+      y: pointer.y,
+      center: projectLatLon(this.center.lat, this.center.lon, this.zoom),
+    };
+  }
+
+  updateSinglePointerDrag(pointer) {
+    if (!this.drag || this.drag.pointerId !== pointer.id) return;
+    const dx = pointer.x - this.drag.x;
+    const dy = pointer.y - this.drag.y;
+
+    if (this.drag.mode === "globe") {
+      this.center = {
+        lat: clamp(this.drag.lat + dy * this.drag.degreesPerPixel, -89.5, 89.5),
+        lon: wrapLongitude(this.drag.lon - dx * this.drag.degreesPerPixel),
+      };
+      this.render();
+      return;
+    }
+
+    const nextCenter = {
+      x: this.drag.center.x - dx,
+      y: this.drag.center.y - dy,
+    };
+    this.center = unprojectPoint(nextCenter, this.zoom);
+    this.render();
+  }
+
+  startPinchGesture() {
+    const pair = getPointerPair(this.activePointers);
+    if (!pair) return;
+
+    const metrics = getPointerPairMetrics(pair[0], pair[1], this.container);
+    if (metrics.distance < PINCH_MIN_DISTANCE_PX) return;
+
+    this.drag = null;
+    this.lastTap = null;
+    this.pinch = {
+      startDistance: metrics.distance,
+      startZoom: this.zoom,
+      startMidClientX: metrics.clientX,
+      startMidClientY: metrics.clientY,
+      startLat: this.center.lat,
+      startLon: this.center.lon,
+      anchor: this.viewMode === "flat" ? this.containerPointToLatLon(metrics.localX, metrics.localY) : null,
+      degreesPerPixel:
+        this.viewMode === "globe"
+          ? 180 /
+            Math.PI /
+            this.getGlobeGeometry(this.container.clientWidth, this.container.clientHeight).radius
+          : null,
+    };
+  }
+
+  updatePinchGesture() {
+    if (!this.pinch) {
+      this.startPinchGesture();
+      return;
+    }
+
+    const pair = getPointerPair(this.activePointers);
+    if (!pair) return;
+
+    const metrics = getPointerPairMetrics(pair[0], pair[1], this.container);
+    if (metrics.distance < PINCH_MIN_DISTANCE_PX) return;
+
+    const nextZoom = clampZoomForView(
+      this.pinch.startZoom + Math.log2(metrics.distance / this.pinch.startDistance),
+      this.viewMode,
+    );
+
+    if (this.viewMode === "globe") {
+      const dx = metrics.clientX - this.pinch.startMidClientX;
+      const dy = metrics.clientY - this.pinch.startMidClientY;
+      this.zoom = nextZoom;
+      this.center = {
+        lat: clamp(this.pinch.startLat + dy * this.pinch.degreesPerPixel, -89.5, 89.5),
+        lon: wrapLongitude(this.pinch.startLon - dx * this.pinch.degreesPerPixel),
+      };
+      this.render();
+      return;
+    }
+
+    this.zoom = nextZoom;
+    const world = projectLatLon(this.pinch.anchor.lat, this.pinch.anchor.lon, nextZoom);
+    const centerWorld = {
+      x: world.x - metrics.localX + this.container.clientWidth / 2,
+      y: world.y - metrics.localY + this.container.clientHeight / 2,
+    };
+    this.center = unprojectPoint(centerWorld, nextZoom);
+    this.render();
+  }
+
+  handleTap(pointer) {
+    if (pointer.suppressTap || pointer.pointerType === "mouse") return;
+
+    const now = performance.now();
+    const elapsed = now - pointer.startTime;
+    const distance = Math.hypot(pointer.x - pointer.startX, pointer.y - pointer.startY);
+    if (elapsed > TAP_MAX_DURATION_MS || distance > TAP_MAX_DISTANCE_PX) return;
+
+    if (
+      this.lastTap &&
+      now - this.lastTap.time <= DOUBLE_TAP_DELAY_MS &&
+      Math.hypot(pointer.x - this.lastTap.x, pointer.y - this.lastTap.y) <= DOUBLE_TAP_DISTANCE_PX
+    ) {
+      this.lastTap = null;
+      this.lastTouchDoubleTapTime = Date.now();
+      this.zoomAround(pointer.x, pointer.y, ZOOM_BUTTON_STEP * 2);
+      return;
+    }
+
+    this.lastTap = { x: pointer.x, y: pointer.y, time: now };
   }
 
   zoomBy(delta) {
@@ -1739,7 +2110,7 @@ function createMapControls() {
 
   for (const [viewMode, label] of [
     ["flat", "Flat"],
-    ["globe", "Globe"],
+    ["globe", "Globe (pre-Alpha)"],
   ]) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1773,6 +2144,31 @@ function createAttribution() {
   attribution.className = "map-attribution";
   attribution.innerHTML = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
   return attribution;
+}
+
+function getPointerPair(activePointers) {
+  const pair = [];
+
+  for (const pointer of activePointers.values()) {
+    pair.push(pointer);
+    if (pair.length === 2) break;
+  }
+
+  return pair.length === 2 ? pair : null;
+}
+
+function getPointerPairMetrics(first, second, container) {
+  const rect = container.getBoundingClientRect();
+  const clientX = (first.x + second.x) / 2;
+  const clientY = (first.y + second.y) / 2;
+
+  return {
+    clientX,
+    clientY,
+    localX: clientX - rect.left,
+    localY: clientY - rect.top,
+    distance: Math.hypot(first.x - second.x, first.y - second.y),
+  };
 }
 
 function getGlobeViewportBounds(geometry, viewport) {

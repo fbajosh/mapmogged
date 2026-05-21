@@ -7,6 +7,7 @@
   --line: #d8dee8;
   --accent: #2563eb;
   --accent-strong: #1d4ed8;
+  --brand-gradient: linear-gradient(90deg, #ec407a 0%, #ab47bc 100%);
   --route: #dc2626;
   --point: #1d4ed8;
   --shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
@@ -254,9 +255,13 @@ dl {
 }
 
 h1 {
+  background: var(--brand-gradient);
+  background-clip: text;
+  color: transparent;
   font-size: 18px;
   line-height: 1.1;
   font-weight: 650;
+  -webkit-background-clip: text;
 }
 
 .minimize-button {
@@ -320,6 +325,28 @@ h1 {
 
 .instructions-modal li + li {
   margin-top: 7px;
+}
+
+.instructions-modal .modal-credit {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.instructions-modal .modal-credit a {
+  color: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.instructions-modal .modal-credit a.brand-link {
+  background: var(--brand-gradient);
+  background-clip: text;
+  color: transparent;
+  text-decoration-color: #ab47bc;
+  -webkit-background-clip: text;
 }
 
 .restore-control {
@@ -423,7 +450,8 @@ body.is-panel-collapsed .map-controls {
   color: #fff;
 }
 
-.layer-controls input[type="number"] {
+.layer-controls input[type="number"],
+.layer-controls input[type="text"] {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -533,8 +561,6 @@ body.is-panel-collapsed .map-controls {
 }
 
 .layer-list {
-  display: grid;
-  gap: 10px;
   margin-top: 10px;
 }
 
@@ -548,10 +574,11 @@ body.is-panel-collapsed .map-controls {
 }
 
 .layer-card {
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  padding: 10px;
+  padding: 10px 0 12px;
+}
+
+.layer-card + .layer-card {
+  border-top: 1px solid var(--line);
 }
 
 .layer-card-header {
@@ -607,6 +634,39 @@ body.is-panel-collapsed .map-controls {
   display: block;
 }
 
+.speed-unit-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 76px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+  padding: 4px;
+}
+
+.speed-unit-menu[hidden] {
+  display: none;
+}
+
+.speed-unit-option {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+}
+
+.speed-unit-option:hover,
+.speed-unit-option.is-active {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--ink);
+}
+
 .layer-controls {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -627,6 +687,10 @@ body.is-panel-collapsed .map-controls {
   font-size: 10px;
   font-weight: 650;
   text-transform: uppercase;
+}
+
+.layer-controls > label.speed-control > span {
+  text-transform: none;
 }
 
 .layer-segmented-control span {
