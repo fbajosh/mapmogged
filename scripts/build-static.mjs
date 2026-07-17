@@ -2,7 +2,7 @@ import { cp, mkdir, readdir, rm, unlink } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
 const dist = new URL("../dist/", import.meta.url);
-const deployEntries = ["index.html", "styles.css", "src", "public"];
+const deployEntries = ["index.html", "styles.css", "src", "public", "gadm", "THIRD_PARTY_NOTICES.md"];
 
 await rm(dist, { force: true, recursive: true });
 await mkdir(dist, { recursive: true });

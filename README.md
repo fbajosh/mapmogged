@@ -61,3 +61,21 @@ Each layer has its own mode, color, width, precision, minimum speed, and maximum
 The map is drawn with browser-native code and canvas overlays. Flat map mode can use OpenStreetMap, CARTO light, CARTO dark, or a blank background. Globe mode uses a local SVG basemap projected onto an orthographic globe. Uploaded point and route layers are drawn over the selected basemap.
 
 For performance, the renderer only draws visible points and visible route segments for the current view. Points or line segments behind the globe or outside the viewport are skipped during rendering.
+
+## Timeline Playback
+
+After every uploaded layer finishes processing, the play control below Map settings opens timeline playback. Ready layers are appended in their displayed order; each layer completes before the next starts, even when their source dates overlap. Playback uses cleaned timestamped points rather than point-mode display deduplication, and it never draws or measures a connecting jump between separate layers.
+
+Playback can be configured by real-time multiplier or total playback duration. Those fields update each other using `playback duration = source duration / multiplier`. Timestamp resampling always smooths tracking progress. `Path + tracking` applies that progress to the simplified route geometry. `Tracking only` projects the same smooth progress onto the original cleaned-point polyline, keeping its jagged detail while the revealed line remains connected to the marker on every frame. The future path can be hidden or shown as a light preview. Play, Pause, and Reset operate on the prepared sequence in both flat and globe views. Starting playback collapses the Play panel and map controls, hides the normal top-left reveal control, then begins after a 0.5-second transition delay. The information box or Escape restores the Play panel, and it returns automatically two seconds after playback finishes. The top-left reveal control remains available for ordinary Layer-panel collapsing.
+
+Optional auto-fit follows the revealed path as it grows. Starting zoom level caps the initial close-up, Path margin sets the minimum screen-edge spacing in pixels, and Smoothing time controls a frame-rate-independent camera easing function in seconds. To compensate for easing lag, camera fitting looks ahead by the smoothing time multiplied by the playback rate while still drawing only the currently revealed route. A smoothing value of zero follows the calculated view immediately.
+
+The optional map information overlay shows covered and total distance in the abbreviated distance unit associated with the selected speed unit, the active timestamp in the browser's local timezone and source elapsed time, and a region/country label when the point matches a configured local boundary.
+
+## Local Region Lookup
+
+Regional names are resolved entirely in the browser. `gadm/manifest.json` lists the local GeoJSON files that form the searchable region set. The loader uses the most specific available GADM `NAME_n` property, so administrative levels can differ between files and another GADM-style country file can be added with a manifest entry rather than a code change.
+
+Point-in-polygon lookup runs at most once per real-time second. The previous region label is retained for two consecutive misses and cleared on the third; a later match restores it. No reverse-geocoding service receives playback coordinates.
+
+See `THIRD_PARTY_NOTICES.md` for the boundary-data terms that must be reviewed before redistribution or deployment.

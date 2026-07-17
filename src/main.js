@@ -1,3 +1,6 @@
+import { PlaybackFeature } from "./playback-feature.js";
+import { getFitCameraTarget } from "./playback-camera.js";
+
 const DEFAULT_CENTER = [39.5, -98.35];
 const DEFAULT_ZOOM = 4;
 const TILE_SIZE = 256;
@@ -160,7 +163,27 @@ const CODICON_PATHS = {
     {
       d: "M8.00101 1C4.13401 1 1.00101 3.8 1.00101 7.667C1.00101 8.956 2.04501 10 3.33401 10C4.75101 10 4.72101 9 6.00001 9C6.64401 9 7.00001 9.606 7.00001 10.25V11.5C7.00001 13.433 8.56701 15 10.5 15C13.653 15 14.999 11.215 14.999 8C14.999 4.134 11.866 1 8.00001 1H8.00101ZM10.5 14C9.12201 14 8.00001 12.878 8.00001 11.5V10.25C8.00001 8.967 7.14001 8 6.00001 8C5.04001 8 4.49801 8.412 4.13901 8.685C3.85401 8.902 3.72401 9 3.33401 9C2.59901 9 2.00101 8.402 2.00101 7.667C2.00101 4.436 4.58001 2 8.00101 2C11.309 2 14 4.692 14 8C14 10.412 13.068 14 10.501 14H10.5ZM12 11C12 11.552 11.552 12 11 12C10.448 12 10 11.552 10 11C10 10.448 10.448 10 11 10C11.552 10 12 10.448 12 11ZM13 8C13 8.552 12.552 9 12 9C11.448 9 11 8.552 11 8C11 7.448 11.448 7 12 7C12.552 7 13 7.448 13 8ZM6.00001 5C6.00001 5.552 5.55201 6 5.00001 6C4.44801 6 4.00001 5.552 4.00001 5C4.00001 4.448 4.44801 4 5.00001 4C5.55201 4 6.00001 4.448 6.00001 5ZM10 5C10 4.448 10.448 4 11 4C11.552 4 12 4.448 12 5C12 5.552 11.552 6 11 6C10.448 6 10 5.552 10 5ZM9.00001 4C9.00001 4.552 8.55201 5 8.00001 5C7.44801 5 7.00001 4.552 7.00001 4C7.00001 3.448 7.44801 3 8.00001 3C8.55201 3 9.00001 3.448 9.00001 4Z",
     },
-  ]
+  ],
+  debugLineByLine: [
+    {
+      d: "M3.62204 8.91401C4.49504 9.08801 5.40004 8.99901 6.22204 8.65801C7.04404 8.31701 7.74704 7.74101 8.24204 7.00101C8.73604 6.26101 9.00004 5.39101 9.00004 4.50101C9.00004 3.30801 8.52604 2.16301 7.68204 1.31901C6.83804 0.475007 5.69404 0.00100708 4.50004 0.00100708C3.61004 0.00100708 2.74004 0.265007 2.00004 0.759007C1.26004 1.25301 0.683038 1.95601 0.343038 2.77901C0.00203794 3.60001 -0.0869621 4.50501 0.0860379 5.37801C0.259038 6.25101 0.688038 7.05301 1.31804 7.68201C1.94804 8.31101 2.74904 8.74001 3.62204 8.91401ZM3.00004 2.85001C3.00004 2.76301 3.02304 2.67701 3.06604 2.60201C3.10904 2.52601 3.17104 2.46301 3.24704 2.41901C3.32204 2.37501 3.40704 2.35101 3.49404 2.35001C3.58104 2.34901 3.66704 2.37101 3.74304 2.41301L6.71304 4.06301C6.79104 4.10601 6.85604 4.17001 6.90104 4.24601C6.94604 4.32301 6.97004 4.41001 6.97004 4.50001C6.97004 4.59001 6.94604 4.67701 6.90104 4.75301C6.85604 4.83001 6.79104 4.89301 6.71304 4.93601L3.74304 6.58601C3.66704 6.62801 3.58104 6.65001 3.49404 6.64901C3.40704 6.64801 3.32204 6.62401 3.24704 6.58001C3.17204 6.53601 3.11004 6.47301 3.06604 6.39701C3.02304 6.32101 3.00004 6.23601 3.00004 6.14901V2.85001ZM15 7.50001C15 7.77601 14.776 8.00001 14.5 8.00001H8.74304C8.99704 7.69301 9.21804 7.35801 9.40004 7.00001H14.5C14.776 7.00001 15 7.22401 15 7.50001ZM9.97804 4.00001C9.94704 3.65701 9.88504 3.32201 9.79304 3.00001H14.5C14.776 3.00001 15 3.22401 15 3.50001C15 3.77601 14.776 4.00001 14.5 4.00001H9.97804ZM15 11.5C15 11.776 14.776 12 14.5 12H1.50004C1.22404 12 1.00004 11.776 1.00004 11.5C1.00004 11.224 1.22404 11 1.50004 11H14.5C14.776 11 15 11.224 15 11.5Z",
+    },
+  ],
+  play: [
+    {
+      d: "M4.74514 3.06414C4.41183 2.87665 4 3.11751 4 3.49993V12.5002C4 12.8826 4.41182 13.1235 4.74512 12.936L12.7454 8.43601C13.0852 8.24486 13.0852 7.75559 12.7454 7.56443L4.74514 3.06414ZM3 3.49993C3 2.35268 4.2355 1.63011 5.23541 2.19257L13.2357 6.69286C14.2551 7.26633 14.2551 8.73415 13.2356 9.30759L5.23537 13.8076C4.23546 14.37 3 13.6474 3 12.5002V3.49993Z",
+    },
+  ],
+  debugPause: [
+    {
+      d: "M5.5 2.75V13.25C5.5 13.664 5.164 14 4.75 14C4.336 14 4 13.664 4 13.25V2.75C4 2.336 4.336 2 4.75 2C5.164 2 5.5 2.336 5.5 2.75ZM11.25 2C10.836 2 10.5 2.336 10.5 2.75V13.25C10.5 13.664 10.836 14 11.25 14C11.664 14 12 13.664 12 13.25V2.75C12 2.336 11.664 2 11.25 2Z",
+    },
+  ],
+  debugRestart: [
+    {
+      d: "M14 8C14 8.81 13.842 9.596 13.528 10.336C13.224 11.053 12.791 11.694 12.241 12.243C11.694 12.791 11.053 13.224 10.337 13.528C9.59602 13.841 8.81002 14 8.00002 14C7.19002 14 6.40402 13.842 5.66402 13.528C4.94702 13.224 4.30602 12.791 3.75702 12.242C3.20802 11.693 2.77602 11.053 2.47202 10.337C2.31002 9.956 2.48802 9.516 2.86902 9.354C3.25102 9.19 3.69002 9.37 3.85202 9.751C4.08102 10.288 4.40502 10.77 4.81802 11.181C5.23002 11.595 5.71202 11.919 6.24902 12.148C7.35602 12.615 8.64302 12.615 9.75202 12.148C10.288 11.919 10.77 11.595 11.181 11.183C11.595 10.77 11.919 10.288 12.148 9.751C12.381 9.197 12.501 8.608 12.501 8C12.501 7.392 12.382 6.803 12.148 6.248C11.919 5.712 11.595 5.23 11.182 4.819C10.77 4.405 10.288 4.081 9.75102 3.852C8.64402 3.385 7.35702 3.385 6.24802 3.852C5.71202 4.081 5.23002 4.405 4.81902 4.817C4.60802 5.027 4.42002 5.256 4.25702 5.5H6.24902C6.66302 5.5 6.99902 5.836 6.99902 6.25C6.99902 6.664 6.66302 7 6.24902 7H2.74902C2.33502 7 1.99902 6.664 1.99902 6.25V2.75C1.99902 2.336 2.33502 2 2.74902 2C3.16302 2 3.49902 2.336 3.49902 2.75V4.032C3.58202 3.938 3.66802 3.845 3.75802 3.757C4.30502 3.209 4.94602 2.776 5.66202 2.472C7.14402 1.845 8.85402 1.845 10.335 2.472C11.052 2.776 11.693 3.209 12.242 3.758C12.791 4.307 13.223 4.947 13.527 5.663C13.84 6.404 13.999 7.19 13.999 8H14Z",
+    },
+  ],
 };
 
 const elements = {
@@ -187,6 +210,7 @@ let processQueue = [];
 let activeProcessingLayer = null;
 let nextLayerId = 1;
 let timelineMap = null;
+let playbackFeature = null;
 let displaySpeedUnitId = "mph";
 let defaultSettings = {
   mode: "points",
@@ -270,6 +294,7 @@ function processSelectedFiles() {
 
   const newLayers = selectedFiles.map((file) => createUploadLayer(file));
   uploadLayers.push(...newLayers);
+  playbackFeature?.invalidateData();
   selectedFiles = [];
   elements.fileInput.value = "";
   updateUploadButtonMeta();
@@ -308,6 +333,7 @@ function createUploadLayer(file) {
 }
 
 function enqueueProcessLayer(layer) {
+  playbackFeature?.invalidateData();
   cancelLayerWork(layer);
   layer.status = "queued";
   layer.progress = 0;
@@ -362,6 +388,7 @@ function processNextLayer() {
       worker.terminate();
       activeProcessingLayer = null;
       rebuildLayer(layer);
+      playbackFeature?.invalidateData();
       renderAllMapLayers({ center: processQueue.length === 0 });
       renderLayerList();
       processNextLayer();
@@ -423,6 +450,7 @@ function clearAllLayers() {
   processQueue = [];
   activeProcessingLayer = null;
   timelineMap.setLayers([]);
+  playbackFeature?.invalidateData();
   renderLayerList();
 }
 
@@ -430,6 +458,7 @@ function deleteLayer(layer) {
   const wasActive = activeProcessingLayer?.id === layer.id;
   cancelLayerWork(layer);
   uploadLayers = uploadLayers.filter((candidate) => candidate.id !== layer.id);
+  playbackFeature?.invalidateData();
   renderAllMapLayers();
   renderLayerList();
 
@@ -528,6 +557,7 @@ function renderLayerList() {
 
   if (!hasLayers) {
     elements.layerList.replaceChildren();
+    playbackFeature?.refreshAvailability();
     return;
   }
 
@@ -538,6 +568,7 @@ function renderLayerList() {
   }
 
   elements.layerList.replaceChildren(fragment);
+  playbackFeature?.refreshAvailability();
 }
 
 function updateUploadButtonMeta() {
@@ -581,6 +612,7 @@ function setDisplaySpeedUnit(unitId) {
   updateSpeedUnitButton();
   setSpeedUnitMenuVisible(false);
   renderLayerList();
+  playbackFeature?.refreshInfo(true);
 }
 
 function setSpeedUnitMenuVisible(isVisible) {
@@ -699,6 +731,7 @@ function createLayerCard(layer) {
 
       if (field === "color") {
         layer.color = value;
+        playbackFeature?.invalidateData();
         rebuildLayer(layer);
         renderAllMapLayers();
         return;
@@ -706,6 +739,7 @@ function createLayerCard(layer) {
 
       if (field === "size") {
         layer.size = value;
+        playbackFeature?.invalidateData();
         rebuildLayer(layer);
         renderAllMapLayers();
         return;
@@ -1269,6 +1303,26 @@ class TimelineMap {
     this.render();
   }
 
+  getView() {
+    return { lat: this.center.lat, lon: this.center.lon, zoom: this.zoom };
+  }
+
+  getFitView(bounds, marginPx, startingZoom) {
+    return getFitCameraTarget(bounds, {
+      width: this.container.clientWidth,
+      height: this.container.clientHeight,
+      marginPx,
+      startingZoom,
+      viewMode: this.viewMode,
+      minZoom: this.viewMode === "globe" ? GLOBE_MIN_ZOOM : MIN_ZOOM,
+      maxZoom: this.viewMode === "globe" ? GLOBE_MAX_ZOOM : MAX_ZOOM,
+      tileSize: TILE_SIZE,
+      globeBaseZoom: LOAD_CENTER_ZOOM,
+      globeBaseRadiusRatio: GLOBE_BASE_RADIUS_RATIO,
+      globeZoomScale: GLOBE_ZOOM_SCALE,
+    });
+  }
+
   setLayers(layers) {
     this.layers = layers;
     this.render();
@@ -1785,10 +1839,14 @@ class TimelineMap {
     const width = this.container.clientWidth;
     const height = this.container.clientHeight;
     const ratio = window.devicePixelRatio || 1;
-    this.overlay.width = width * ratio;
-    this.overlay.height = height * ratio;
-    this.overlay.style.width = `${width}px`;
-    this.overlay.style.height = `${height}px`;
+    const pixelWidth = Math.round(width * ratio);
+    const pixelHeight = Math.round(height * ratio);
+    if (this.overlay.width !== pixelWidth || this.overlay.height !== pixelHeight) {
+      this.overlay.width = pixelWidth;
+      this.overlay.height = pixelHeight;
+      this.overlay.style.width = `${width}px`;
+      this.overlay.style.height = `${height}px`;
+    }
 
     const ctx = this.overlay.getContext("2d");
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -2134,8 +2192,19 @@ function createMapControls() {
     settingsPanel.append(button);
   }
 
+  const playbackButton = document.createElement("button");
+  playbackButton.type = "button";
+  playbackButton.className = "map-settings-button map-playback-button";
+  playbackButton.dataset.playback = "";
+  playbackButton.title = "Play timeline (load a layer with timestamps first)";
+  playbackButton.setAttribute("aria-label", playbackButton.title);
+  playbackButton.setAttribute("aria-controls", "playbackModal");
+  playbackButton.setAttribute("aria-expanded", "false");
+  playbackButton.disabled = true;
+  playbackButton.append(createCodicon("debugLineByLine"));
+
   settingsWrap.append(settingsButton, settingsPanel);
-  controls.append(zoomGroup, settingsWrap);
+  controls.append(zoomGroup, settingsWrap, playbackButton);
   return controls;
 }
 
@@ -2374,3 +2443,11 @@ function modulo(value, divisor) {
 
 timelineMap = new TimelineMap(document.querySelector("#map"));
 timelineMap.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+playbackFeature = new PlaybackFeature({
+  map: timelineMap,
+  button: timelineMap.controls.querySelector("[data-playback]"),
+  getLayers: () => uploadLayers,
+  getSpeedUnitId: () => displaySpeedUnitId,
+  getNormalCanvasLayers: () => uploadLayers.map((layer) => layer.canvasLayer).filter(Boolean),
+  createIcon: (iconName) => createCodicon(iconName),
+});

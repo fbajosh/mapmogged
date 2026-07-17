@@ -10,6 +10,12 @@
   <body>
     <div id="map" aria-label="MapMogged"></div>
 
+    <div id="playbackInfo" class="playback-info" aria-label="Playback information" hidden>
+      <div id="playbackDistanceInfo"></div>
+      <div id="playbackTimeInfo"></div>
+      <div id="playbackRegionInfo" hidden></div>
+    </div>
+
     <aside class="control-panel" aria-label="Timeline controls">
       <div class="brand-row">
         <h1>MapMogged</h1>
@@ -116,11 +122,165 @@
           <li>Files process automatically after upload</li>
           <li>Use the add icon in Layers to upload more files</li>
           <li>You can adjust layer settings and reprocess after uploading</li>
+          <li>After processing finishes, use the play icon below Map settings to animate layers in their displayed order</li>
+          <li>Playback and regional lookup stay in your browser; bundled regional boundaries are checked locally</li>
         </ul>
         <br>
         <p class="modal-credit">
           Brought to you by <a class="brand-link" href="https://appmogged.com/">AppMogged</a>. View project on <a href="https://github.com/fbajosh/mapmogged">Github</a>.
         </p>
+      </div>
+    </div>
+
+    <div id="playbackModal" class="modal-backdrop playback-backdrop" role="dialog" aria-labelledby="playbackTitle" hidden>
+      <div class="playback-modal">
+        <div class="modal-header">
+          <h2 id="playbackTitle">Play timeline</h2>
+          <button
+            id="closePlaybackButton"
+            class="minimize-button panel-icon-button"
+            type="button"
+            aria-label="Close playback"
+            title="Close playback"
+          ></button>
+        </div>
+
+        <div class="playback-form">
+          <fieldset class="playback-fieldset">
+            <legend>Playback length</legend>
+            <div class="segmented-control playback-segmented playback-rate-mode">
+              <label>
+                <input type="radio" name="playbackRateMode" value="multiplier" />
+                <span>Multiplier</span>
+              </label>
+              <label>
+                <input type="radio" name="playbackRateMode" value="duration" checked />
+                <span>Total time</span>
+              </label>
+            </div>
+
+            <div class="playback-rate-grid">
+              <div class="playback-field">
+                <label for="playbackMultiplier">Real-time multiplier</label>
+                <div class="playback-input-suffix">
+                  <input id="playbackMultiplier" type="number" min="0.0001" step="any" disabled />
+                  <span>×</span>
+                </div>
+              </div>
+              <div class="playback-field">
+                <label for="playbackDuration">Total time</label>
+                <div class="playback-input-unit">
+                  <input id="playbackDuration" type="number" min="0.1" step="any" value="60" />
+                  <select id="playbackDurationUnit" aria-label="Total time unit">
+                    <option value="seconds" selected>Seconds</option>
+                    <option value="minutes">Minutes</option>
+                    <option value="hours">Hours</option>
+                    <option value="days">Days</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="playback-fieldset">
+            <legend>Timestamp resampling</legend>
+            <div class="playback-resample-row">
+              <div class="playback-field">
+                <label for="playbackResampleValue">Interval</label>
+                <input id="playbackResampleValue" type="number" min="0.01" step="any" value="5" />
+              </div>
+              <div class="segmented-control playback-segmented playback-resample-unit" role="group" aria-label="Resampling unit">
+                <label>
+                  <input type="radio" name="playbackResampleUnit" value="minutes" checked />
+                  <span>Mins.</span>
+                </label>
+                <label>
+                  <input type="radio" name="playbackResampleUnit" value="hours" />
+                  <span>Hours</span>
+                </label>
+                <label>
+                  <input type="radio" name="playbackResampleUnit" value="days" />
+                  <span>Days</span>
+                </label>
+              </div>
+            </div>
+            <div class="playback-field playback-resample-mode-field">
+              <label>Apply resampling to</label>
+              <div class="segmented-control playback-segmented" role="group" aria-label="Apply timestamp resampling to">
+                <label>
+                  <input type="radio" name="playbackResampleMode" value="resampled" checked />
+                  <span>Path + tracking</span>
+                </label>
+                <label>
+                  <input type="radio" name="playbackResampleMode" value="tracking-only" />
+                  <span>Tracking only</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="playback-fieldset">
+            <legend>Path preview</legend>
+            <div class="segmented-control playback-segmented">
+              <label>
+                <input type="radio" name="playbackPreview" value="0" />
+                <span>None</span>
+              </label>
+              <label>
+                <input type="radio" name="playbackPreview" value="0.3" checked />
+                <span>Light</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset class="playback-fieldset">
+            <legend>Auto-fit revealed path</legend>
+            <div class="segmented-control playback-segmented">
+              <label>
+                <input type="radio" name="playbackAutoFit" value="on" />
+                <span>On</span>
+              </label>
+              <label>
+                <input type="radio" name="playbackAutoFit" value="off" checked />
+                <span>Off</span>
+              </label>
+            </div>
+            <div class="playback-auto-fit-fields">
+              <div class="playback-field">
+                <label for="playbackStartingZoom">Starting zoom level</label>
+                <input id="playbackStartingZoom" type="number" min="2" max="18" step="0.5" value="14" title="Maximum zoom while the revealed path has no extent" disabled />
+              </div>
+              <div class="playback-field">
+                <label for="playbackPathMargin">Path margin</label>
+                <div class="playback-input-suffix">
+                  <input id="playbackPathMargin" type="number" min="0" step="1" value="48" title="Minimum distance between the revealed path and the screen edge" disabled />
+                  <span>px</span>
+                </div>
+              </div>
+              <div class="playback-field">
+                <label for="playbackSmoothing">Smoothing time</label>
+                <div class="playback-input-suffix">
+                  <input id="playbackSmoothing" type="number" min="0" step="0.05" value="0.4" title="Camera easing time in seconds; use 0 for immediate movement" disabled />
+                  <span>s</span>
+                </div>
+              </div>
+            </div>
+          </fieldset>
+
+          <label class="playback-checkbox">
+            <input id="playbackShowInfo" type="checkbox" checked />
+            <span>Show information on the map</span>
+          </label>
+
+          <div id="playbackError" class="playback-message playback-error" role="alert" hidden></div>
+          <div id="playbackStatus" class="playback-message" aria-live="polite">Ready</div>
+
+          <div class="playback-actions">
+            <button id="playbackPlayButton" class="playback-action-button" type="button" aria-label="Play" title="Play"></button>
+            <button id="playbackPauseButton" class="playback-action-button" type="button" aria-label="Pause" title="Pause" disabled></button>
+            <button id="playbackResetButton" class="playback-action-button" type="button" aria-label="Reset" title="Reset" disabled></button>
+          </div>
+        </div>
       </div>
     </div>
 
