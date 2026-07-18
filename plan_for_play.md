@@ -200,6 +200,7 @@ Acceptance:
   - `[distance covered] / [distance total] [distance unit]`
   - `[local datetime] / [elapsed value] [elapsed unit]`
   - `[region], [country]` only when the point matches any feature in the configured local GeoJSON set
+  - `[elapsed real playback time] / [total real playback time] ([playback multiplier to two significant figures]x)` as the final row
 - Add the manifest, generic GeoJSON loader/normalizer, lookup code, tests, notices, and attribution. Update the static build to include `gadm`.
 - Cache region results so a polygon search is not repeated on every frame.
 

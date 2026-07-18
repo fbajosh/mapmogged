@@ -9,6 +9,8 @@ import {
   formatDistance,
   formatElapsed,
   formatLocalDate,
+  formatPlaybackClock,
+  formatPlaybackSpeed,
   getPreferredDurationUnit,
   samplePlaybackAt,
 } from "../src/playback-model.js";
@@ -118,6 +120,19 @@ test("formats distance, elapsed boundaries, and local timestamps", () => {
   assert.equal(formatElapsed(365 * 24 * 60 * 60_000).unit, "years");
   const localDate = new Date(2026, 2, 7, 15, 0);
   assert.equal(formatLocalDate(localDate.getTime()), "March 7");
+});
+
+test("formats playback speed with two significant figures", () => {
+  assert.equal(formatPlaybackSpeed(123456), "120,000");
+  assert.equal(formatPlaybackSpeed(1.54), "1.5");
+  assert.equal(formatPlaybackSpeed(0.01234), "0.012");
+});
+
+test("formats real playback time as unbounded minutes and seconds", () => {
+  assert.equal(formatPlaybackClock(27_000), "0:27");
+  assert.equal(formatPlaybackClock(30_000), "0:30");
+  assert.equal(formatPlaybackClock(3_723_400), "62:03");
+  assert.equal(formatPlaybackClock(NaN), "—:—");
 });
 
 function makeLayer(id, points) {

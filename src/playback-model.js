@@ -351,6 +351,21 @@ function formatDistance(meters, speedUnitId) {
   };
 }
 
+function formatPlaybackSpeed(multiplier) {
+  const value = Number(multiplier);
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  return value.toLocaleString("en-US", { maximumSignificantDigits: 2 });
+}
+
+function formatPlaybackClock(durationMs) {
+  const value = Number(durationMs);
+  if (!Number.isFinite(value) || value < 0) return "—:—";
+  const totalSeconds = Math.floor(value / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 function formatElapsed(elapsedMs) {
   const milliseconds = Math.max(0, Number(elapsedMs) || 0);
   const minutes = milliseconds / DURATION_UNIT_MS.minutes;
@@ -452,6 +467,8 @@ export {
   formatDistance,
   formatElapsed,
   formatLocalDate,
+  formatPlaybackClock,
+  formatPlaybackSpeed,
   getPreferredDurationUnit,
   haversineMeters,
   samplePlaybackAt,

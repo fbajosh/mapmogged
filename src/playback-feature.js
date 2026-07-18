@@ -6,6 +6,8 @@ import {
   formatDistance,
   formatElapsed,
   formatLocalDate,
+  formatPlaybackClock,
+  formatPlaybackSpeed,
   getPreferredDurationUnit,
   samplePlaybackAt,
 } from "./playback-model.js";
@@ -354,6 +356,10 @@ class PlaybackFeature {
     const elapsed = formatElapsed(snapshot.sourceElapsedMs);
     this.elements.distanceInfo.textContent = `${covered.text} / ${total.text} ${covered.unit}`;
     this.elements.timeInfo.textContent = `${formatLocalDate(snapshot.timeMs)} (${elapsed.text} ${elapsed.unit})`;
+    const multiplier = this.getMultiplier();
+    const playbackTotalMs = derivePlaybackDuration(this.controller.sequence?.sourceDurationMs, multiplier);
+    const playbackElapsedMs = derivePlaybackDuration(snapshot.sourceElapsedMs, multiplier);
+    this.elements.speedInfo.textContent = `${formatPlaybackClock(playbackElapsedMs)} / ${formatPlaybackClock(playbackTotalMs)} (${formatPlaybackSpeed(multiplier)}x)`;
 
     const regionResult = this.regionTracker.update(snapshot.lat, snapshot.lon, now, {
       force: forceRegionLookup,
@@ -473,6 +479,7 @@ class PlaybackFeature {
         ? this.getAutoFitError()
         : "Enter a playback multiplier or total time greater than zero.",
     );
+    this.refreshInfo(true);
     this.syncUi();
   }
 
@@ -695,6 +702,7 @@ function getElements() {
     info: document.querySelector("#playbackInfo"),
     distanceInfo: document.querySelector("#playbackDistanceInfo"),
     timeInfo: document.querySelector("#playbackTimeInfo"),
+    speedInfo: document.querySelector("#playbackSpeedInfo"),
     regionInfo: document.querySelector("#playbackRegionInfo"),
   };
 }

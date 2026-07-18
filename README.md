@@ -70,7 +70,7 @@ Playback can be configured by real-time multiplier or total playback duration. T
 
 Optional auto-fit follows the revealed path as it grows. Starting zoom level caps the initial close-up, Path margin sets the minimum screen-edge spacing in pixels, and Smoothing time controls a frame-rate-independent camera easing function in seconds. To compensate for easing lag, camera fitting looks ahead by the smoothing time multiplied by the playback rate while still drawing only the currently revealed route. A smoothing value of zero follows the calculated view immediately.
 
-The optional map information overlay shows covered and total distance in the abbreviated distance unit associated with the selected speed unit, the active timestamp in the browser's local timezone and source elapsed time, and a region/country label when the point matches a configured local boundary.
+The optional map information overlay shows covered and total distance in the abbreviated distance unit associated with the selected speed unit, the active date in the browser's local timezone with source elapsed time, and a region/country label when the point matches a configured local boundary. Its final row shows elapsed and total real playback time as `m:ss / m:ss`, followed by the playback multiplier formatted to two significant figures.
 
 ## Local Region Lookup
 
