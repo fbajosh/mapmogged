@@ -7,6 +7,7 @@ import {
   classifyRouteEdge,
   createRouteEdge,
   getPartialRouteEdge,
+  getRouteEdgeRange,
   getRouteEdgeBoundsPoints,
   interpolateRouteEdge,
 } from "../src/route-geometry.js";
@@ -15,6 +16,20 @@ test("classifies short, smooth, and great-circle edges by angular distance", () 
   assert.equal(classifyRouteEdge([0, 0], [0, 0.05]), ROUTE_EDGE_STRAIGHT);
   assert.equal(classifyRouteEdge([0, 0], [0, 0.5]), ROUTE_EDGE_BEZIER);
   assert.equal(classifyRouteEdge([0, 0], [0, 2]), ROUTE_EDGE_GREAT_CIRCLE);
+});
+
+test("extracts a middle section of a Bezier edge without changing its path", () => {
+  const edge = createRouteEdge([0, -0.3], [0, 0], [0.4, 0.4], [0.3, 0.7]);
+  const middle = getRouteEdgeRange(edge, 0.25, 0.75);
+  const expectedStart = interpolateRouteEdge(edge, 0.25);
+  const expectedEnd = interpolateRouteEdge(edge, 0.75);
+
+  assert.ok(pointsAlmostEqual([middle.start.lat, middle.start.lon], [expectedStart.lat, expectedStart.lon]));
+  assert.ok(pointsAlmostEqual([middle.end.lat, middle.end.lon], [expectedEnd.lat, expectedEnd.lon]));
+  assert.ok(pointsAlmostEqual(
+    [interpolateRouteEdge(middle, 0.5).lat, interpolateRouteEdge(middle, 0.5).lon],
+    [interpolateRouteEdge(edge, 0.5).lat, interpolateRouteEdge(edge, 0.5).lon],
+  ));
 });
 
 test("creates a cubic curve that passes through its observed endpoints", () => {
@@ -55,3 +70,7 @@ test("partial curves terminate at the same interpolated location", () => {
   assert.ok(Math.abs(actual.lon - expected.lon) < 1e-12);
   assert.equal(getRouteEdgeBoundsPoints(partial).length, 4);
 });
+
+function pointsAlmostEqual(first, second, epsilon = 1e-12) {
+  return Math.abs(first[0] - second[0]) < epsilon && Math.abs(first[1] - second[1]) < epsilon;
+}

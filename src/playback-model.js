@@ -78,6 +78,9 @@ function buildPlaybackSequence(layers, intervalMs, options = {}) {
     segments.push({
       layerId: layer.id,
       color: layer.color || "#2563eb",
+      colorMode: layer.colorMode === "gradient" ? "gradient" : "solid",
+      gradientStartColor: layer.gradientStartColor || layer.color || "#2563eb",
+      gradientEndColor: layer.gradientEndColor || layer.color || "#2563eb",
       width: Number.isFinite(layer.size) ? layer.size : 2.5,
       sequenceStartMs: sourceDurationMs,
       sourceStartMs,

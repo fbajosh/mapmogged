@@ -41,6 +41,18 @@ test("builds layers sequentially without cross-layer distance", () => {
   assert.equal(samplePlaybackAt(sequence, 1000).layerId, 2);
 });
 
+test("preserves a layer's time-gradient style for playback", () => {
+  const layer = makeLayer(1, [[0, 0, 0], [0, 1, 1000]]);
+  layer.colorMode = "gradient";
+  layer.gradientStartColor = "#000000";
+  layer.gradientEndColor = "#ffffff";
+  const segment = buildPlaybackSequence([layer], 500).segments[0];
+
+  assert.equal(segment.colorMode, "gradient");
+  assert.equal(segment.gradientStartColor, "#000000");
+  assert.equal(segment.gradientEndColor, "#ffffff");
+});
+
 test("resamples endpoints and tracks the great-circle path at playback time", () => {
   const sequence = buildPlaybackSequence([makeLayer(1, [[0, 0, 0], [10, 10, 1000]])], 400);
   const segment = sequence.segments[0];

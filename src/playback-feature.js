@@ -412,6 +412,9 @@ class PlaybackFeature {
         id: layer.id,
         status: layer.status,
         color: layer.color,
+        colorMode: layer.colorMode,
+        gradientStartColor: layer.gradientStartColor,
+        gradientEndColor: layer.gradientEndColor,
         size: layer.size,
         cleanedPoints: layer.cleanedPoints,
       }));

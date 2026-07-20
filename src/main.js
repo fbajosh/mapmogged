@@ -4,8 +4,15 @@ import {
   angularDistanceDegrees,
   classifyRouteAngle,
   createRouteEdge,
+  getRouteEdgeRange,
 } from "./route-geometry.js";
 import { drawRouteEdgeFlat, drawRouteEdgeGlobe } from "./route-canvas.js";
+import {
+  createColorRamp,
+  getTimeGradientBin,
+  resolvePointTimeBounds,
+  visitTimeGradientBands,
+} from "./time-gradient.js";
 import {
   ceilDateTimeToMinute,
   filterPointsByDate,
@@ -15,6 +22,8 @@ import {
   parseDateTimeLocal,
   resolveDateBounds,
 } from "./date-filter.js";
+import { getLayerTravelSummary } from "./layer-summary.js";
+import { hexToHsv, hexToRgb, hsvToHex, rgbToHex } from "./color-picker-model.js";
 
 const DEFAULT_CENTER = [39.5, -98.35];
 const DEFAULT_ZOOM = 4;
@@ -215,6 +224,7 @@ const CODICON_PATHS = {
 };
 
 const elements = {
+  controlPanel: document.querySelector(".control-panel"),
   uploadSection: document.querySelector("#uploadSection"),
   fileInput: document.querySelector("#timelineFile"),
   fileLabel: document.querySelector("#fileLabel"),
@@ -290,6 +300,10 @@ document.addEventListener("keydown", (event) => {
   if (!elements.speedUnitMenu.hidden) {
     setSpeedUnitMenuVisible(false);
   }
+
+  for (const popover of document.querySelectorAll("[data-color-picker-popover]:not([hidden])")) {
+    setColorPickerVisible(popover, false);
+  }
 });
 elements.minimizeButton.addEventListener("click", () => {
   setSpeedUnitMenuVisible(false);
@@ -305,12 +319,20 @@ document.addEventListener("click", (event) => {
   ) {
     setSpeedUnitMenuVisible(false);
   }
+
+  for (const popover of document.querySelectorAll("[data-color-picker-popover]:not([hidden])")) {
+    if (!popover.contains(event.target) && !popover.anchorButton?.contains(event.target)) {
+      setColorPickerVisible(popover, false);
+    }
+  }
 });
 window.addEventListener("resize", () => {
   if (!elements.speedUnitMenu.hidden) {
     positionSpeedUnitMenu();
   }
+  positionOpenColorPickers();
 });
+elements.controlPanel.addEventListener("scroll", positionOpenColorPickers);
 
 renderLayerList();
 
@@ -337,6 +359,7 @@ function processSelectedFiles() {
 
 function createUploadLayer(file) {
   const id = nextLayerId++;
+  const color = getLayerCycleColor(id - 1);
 
   return {
     id,
@@ -348,7 +371,10 @@ function createUploadLayer(file) {
     maxSpeed: defaultSettings.maxSpeed,
     precision: defaultSettings.precision,
     size: defaultSettings.size,
-    color: getLayerCycleColor(id - 1),
+    color,
+    colorMode: "solid",
+    gradientStartColor: color,
+    gradientEndColor: getLayerCycleColor(id),
     isCollapsed: false,
     activeSettingsTab: "visual",
     availableStartMs: null,
@@ -534,8 +560,20 @@ function rebuildLayer(layer) {
     layer.mode === "points" ? buildRoundedPins(layer.cleanedPoints, layer.precision) : layer.cleanedPoints;
   layer.canvasLayer =
     layer.mode === "points"
-      ? new PointCanvasLayer(layer.displayPoints, { color: layer.color, radius: layer.size })
-      : new RouteCanvasLayer(layer.displayPoints, { color: layer.color, width: layer.size });
+      ? new PointCanvasLayer(layer.displayPoints, { ...getLayerColorOptions(layer), radius: layer.size })
+      : new RouteCanvasLayer(layer.displayPoints, { ...getLayerColorOptions(layer), width: layer.size });
+}
+
+function getLayerColorOptions(layer) {
+  const timeBounds = resolvePointTimeBounds(layer.cleanedPoints);
+  return {
+    color: layer.color,
+    colorMode: layer.colorMode,
+    gradientStartColor: layer.gradientStartColor,
+    gradientEndColor: layer.gradientEndColor,
+    timeStartMs: timeBounds.startMs,
+    timeEndMs: timeBounds.endMs,
+  };
 }
 
 function renderAllMapLayers(options = {}) {
@@ -606,6 +644,7 @@ function centerOnLayerSampleAverage() {
 }
 
 function renderLayerList() {
+  removeColorPickerPopovers();
   const hasLayers = uploadLayers.length > 0;
   elements.uploadSection.hidden = hasLayers;
   elements.layerSection.hidden = !hasLayers;
@@ -708,7 +747,12 @@ function renderSettingsControls(container, { modeName, values, onChange }) {
       ["points", "Points"],
       ["route", "Route"],
     ], (value) => onChange("mode", value)),
-    createColorControl("Color", values.color, (value) => onChange("color", value), "layer-span-3"),
+    createColorControl("Color", {
+      mode: values.colorMode,
+      solidColor: values.color,
+      startColor: values.gradientStartColor,
+      endColor: values.gradientEndColor,
+    }, (value) => onChange("colorStyle", value), "layer-span-3"),
     createNumberControl("Weight", values.size, 1, 12, 0.5, (value) => onChange("size", value), "layer-span-3"),
   );
 }
@@ -849,8 +893,11 @@ function createVisualSettings(layer) {
         return;
       }
 
-      if (field === "color") {
-        layer.color = value;
+      if (field === "colorStyle") {
+        layer.colorMode = value.mode;
+        layer.color = value.solidColor;
+        layer.gradientStartColor = value.startColor;
+        layer.gradientEndColor = value.endColor;
         playbackFeature?.invalidateData();
         rebuildLayer(layer);
         renderAllMapLayers();
@@ -898,7 +945,7 @@ function createDateRangeSettings(layer) {
   } else {
     content.append(
       createDateTimeControl(
-        "Starting datetime",
+        "START",
         layer.dateRangeStartMs,
         layer.availableStartMs,
         layer.dateRangeEndMs,
@@ -906,7 +953,7 @@ function createDateRangeSettings(layer) {
         "layer-span-6",
       ),
       createDateTimeControl(
-        "Ending datetime",
+        "END",
         layer.dateRangeEndMs,
         layer.dateRangeStartMs,
         layer.availableEndMs,
@@ -922,27 +969,28 @@ function createDateExclusionsSettings(layer) {
   const content = document.createElement("div");
   content.className = "layer-exclusions-settings";
 
-  const toolbar = document.createElement("div");
-  toolbar.className = "date-exclusion-toolbar";
-  const addButton = createIconButton("add", "Add date exclusion");
-  addButton.classList.add("date-exclusion-add");
-  const addLabel = document.createElement("span");
-  addLabel.textContent = "Add exclusion";
-  addButton.append(addLabel);
-  addButton.disabled = !hasLayerDateBounds(layer);
-  addButton.addEventListener("click", () => addDateExclusion(layer));
-  toolbar.append(addButton);
-  content.append(toolbar);
-
   if (!hasLayerDateBounds(layer)) {
     content.append(createLayerSettingsMessage("Date bounds will be available after processing."));
   } else if (!layer.dateExclusions.length) {
-    content.append(createLayerSettingsMessage("No excluded time periods."));
+    const toolbar = document.createElement("div");
+    toolbar.className = "date-exclusion-toolbar";
+    toolbar.append(createAddExclusionButton(layer, true));
+    content.append(toolbar);
   } else {
+    const header = document.createElement("div");
+    header.className = "date-exclusion-header";
+    const startLabel = document.createElement("span");
+    startLabel.className = "date-exclusion-start-label";
+    startLabel.textContent = "Start";
+    const endLabel = document.createElement("span");
+    endLabel.className = "date-exclusion-end-label";
+    endLabel.textContent = "End";
+    header.append(startLabel, endLabel, createAddExclusionButton(layer, false));
+
     const list = document.createElement("div");
     list.className = "date-exclusion-list";
 
-    for (const [index, exclusion] of layer.dateExclusions.entries()) {
+    for (const exclusion of layer.dateExclusions) {
       const row = document.createElement("div");
       row.className = "date-exclusion-row";
       row.append(
@@ -953,7 +1001,7 @@ function createDateExclusionsSettings(layer) {
           exclusion.endMs,
           (value) => updateDateExclusion(layer, exclusion.id, "startMs", value),
           "",
-          { hideLabel: index > 0 },
+          { hideLabel: true },
         ),
         createDateTimeControl(
           "End",
@@ -962,7 +1010,7 @@ function createDateExclusionsSettings(layer) {
           layer.availableEndMs,
           (value) => updateDateExclusion(layer, exclusion.id, "endMs", value),
           "",
-          { hideLabel: index > 0 },
+          { hideLabel: true },
         ),
       );
 
@@ -973,9 +1021,21 @@ function createDateExclusionsSettings(layer) {
       list.append(row);
     }
 
-    content.append(list);
+    content.append(header, list);
   }
   return content;
+}
+
+function createAddExclusionButton(layer, showLabel) {
+  const addButton = createIconButton("add", "Add date exclusion");
+  addButton.classList.add("date-exclusion-add");
+  if (showLabel) {
+    const addLabel = document.createElement("span");
+    addLabel.textContent = "Add Exclusion";
+    addButton.append(addLabel);
+  }
+  addButton.addEventListener("click", () => addDateExclusion(layer));
+  return addButton;
 }
 
 function createLayerSettingsMessage(message) {
@@ -1177,30 +1237,24 @@ function setupPanelIconButton(button, iconName, label) {
 }
 
 function createColorControl(label, value, onChange, className = "") {
+  const state = {
+    mode: value?.mode === "gradient" ? "gradient" : "solid",
+    solidColor: value?.solidColor || "#2563eb",
+    startColor: value?.startColor || value?.solidColor || "#2563eb",
+    endColor: value?.endColor || value?.solidColor || "#2563eb",
+  };
   const wrapper = document.createElement("div");
   wrapper.className = ["color-control", className].filter(Boolean).join(" ");
   const text = document.createElement("span");
   text.textContent = label;
   const row = document.createElement("div");
   row.className = "color-input-row";
-  const input = document.createElement("input");
-  input.type = "color";
-  input.value = value;
-  input.className = "color-picker-input";
-  input.setAttribute("aria-label", label);
-  row.append(createColorSwatchGroup(input, onChange), input);
-  wrapper.append(text, row);
-  return wrapper;
-}
-
-function createColorSwatchGroup(input, onChange = () => {}) {
-  if (!input) return document.createElement("div");
-
   const group = document.createElement("div");
   group.className = "color-presets";
   group.dataset.colorPresets = "";
   group.setAttribute("aria-label", "Layer colors");
 
+  const presetButtons = [];
   for (const color of BASE_LAYER_COLORS) {
     const button = document.createElement("button");
     button.type = "button";
@@ -1208,11 +1262,14 @@ function createColorSwatchGroup(input, onChange = () => {}) {
     button.style.backgroundColor = color;
     button.dataset.color = color;
     button.title = color;
-    button.setAttribute("aria-label", "Use color " + color);
+    button.setAttribute("aria-label", "Use solid color " + color);
     button.addEventListener("click", () => {
-      setColorInputValue(input, color, onChange);
-      syncColorPresetSelection(group, color);
+      state.mode = "solid";
+      state.solidColor = color;
+      setColorPickerVisible(popover, false);
+      emitColorStyle();
     });
+    presetButtons.push(button);
     group.append(button);
   }
 
@@ -1220,62 +1277,319 @@ function createColorSwatchGroup(input, onChange = () => {}) {
   customButton.type = "button";
   customButton.className = "color-preset color-preset-custom";
   customButton.dataset.customColor = "";
-  customButton.title = "Custom color";
-  customButton.setAttribute("aria-label", "Choose custom color");
+  customButton.title = "Custom color or gradient";
+  customButton.setAttribute("aria-label", "Choose a custom color or gradient");
+  customButton.setAttribute("aria-expanded", "false");
   customButton.append(createCodicon("symbolColor"));
-  customButton.addEventListener("click", () => openColorPicker(input));
   group.append(customButton);
 
-  input.addEventListener("input", () => {
-    onChange(input.value);
-    syncColorPresetSelection(group, input.value);
+  const popover = createTabbedColorPicker(state, emitColorStyle);
+  popover.anchorButton = customButton;
+  popover.ownerControl = wrapper;
+  customButton.setAttribute("aria-controls", popover.id);
+  customButton.addEventListener("click", () => {
+    setColorPickerVisible(popover, !popover.isConnected || popover.hidden);
   });
-  syncColorPresetSelection(group, input.value);
-  return group;
+
+  row.append(group);
+  wrapper.append(text, row);
+  syncColorControl();
+  return wrapper;
+
+  function emitColorStyle() {
+    syncColorControl();
+    onChange({ ...state });
+  }
+
+  function syncColorControl() {
+    let isBaseColor = false;
+    for (const button of presetButtons) {
+      const isActive = state.mode === "solid" && button.dataset.color.toLowerCase() === state.solidColor.toLowerCase();
+      isBaseColor ||= isActive;
+      button.classList.toggle("is-selected", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    }
+
+    const isCustom = state.mode === "gradient" || !isBaseColor;
+    customButton.classList.toggle("is-selected", isCustom);
+    customButton.classList.toggle("has-custom-color", isCustom);
+    customButton.setAttribute("aria-pressed", String(isCustom));
+    customButton.style.background = state.mode === "gradient"
+      ? `linear-gradient(90deg, ${state.startColor}, ${state.endColor})`
+      : isBaseColor ? "#fff" : state.solidColor;
+    popover.sync();
+  }
 }
 
-function setColorInputValue(input, color, onChange) {
-  if (!input) {
-    console.warn("setColorInputValue called without input");
-    return;
+let nextColorPickerId = 1;
+
+function createTabbedColorPicker(state, onChange) {
+  const popover = document.createElement("div");
+  popover.id = `color-picker-${nextColorPickerId++}`;
+  popover.className = "color-picker-popover";
+  popover.dataset.colorPickerPopover = "";
+  popover.hidden = true;
+
+  const tabs = document.createElement("div");
+  tabs.className = "color-picker-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Color type");
+  const solidTab = createColorPickerTab("Solid");
+  const gradientTab = createColorPickerTab("Gradient");
+  tabs.append(solidTab, gradientTab);
+
+  const solidPanel = document.createElement("div");
+  solidPanel.className = "color-picker-panel";
+  solidPanel.setAttribute("role", "tabpanel");
+  const solidPicker = createInlineSolidColorPicker(state.solidColor, (color) => {
+    state.mode = "solid";
+    state.solidColor = color;
+    onChange();
+  });
+  solidPanel.append(solidPicker.element);
+
+  const gradientPanel = document.createElement("div");
+  gradientPanel.className = "color-picker-panel color-gradient-panel";
+  gradientPanel.setAttribute("role", "tabpanel");
+  const startInput = createColorPickerChoice("START", state.startColor);
+  const endInput = createColorPickerChoice("END", state.endColor);
+  const preview = document.createElement("div");
+  preview.className = "color-gradient-preview";
+  preview.setAttribute("aria-label", "Gradient preview");
+  gradientPanel.append(startInput.label, endInput.label, preview);
+  popover.append(tabs, solidPanel, gradientPanel);
+
+  solidTab.addEventListener("click", () => {
+    state.mode = "solid";
+    onChange();
+  });
+  gradientTab.addEventListener("click", () => {
+    state.mode = "gradient";
+    onChange();
+  });
+  startInput.input.addEventListener("input", () => {
+    state.mode = "gradient";
+    state.startColor = startInput.input.value;
+    onChange();
+  });
+  endInput.input.addEventListener("input", () => {
+    state.mode = "gradient";
+    state.endColor = endInput.input.value;
+    onChange();
+  });
+
+  popover.sync = () => {
+    const isGradient = state.mode === "gradient";
+    solidTab.classList.toggle("is-active", !isGradient);
+    gradientTab.classList.toggle("is-active", isGradient);
+    solidTab.setAttribute("aria-selected", String(!isGradient));
+    gradientTab.setAttribute("aria-selected", String(isGradient));
+    solidPanel.hidden = isGradient;
+    gradientPanel.hidden = !isGradient;
+    solidPicker.sync(state.solidColor);
+    startInput.input.value = state.startColor;
+    endInput.input.value = state.endColor;
+    preview.style.background = `linear-gradient(90deg, ${state.startColor}, ${state.endColor})`;
+  };
+  popover.sync();
+  return popover;
+}
+
+function createColorPickerTab(label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "color-picker-tab";
+  button.setAttribute("role", "tab");
+  button.textContent = label;
+  return button;
+}
+
+function createColorPickerChoice(label, value) {
+  const wrapper = document.createElement("label");
+  wrapper.className = "color-picker-choice";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const input = document.createElement("input");
+  input.type = "color";
+  input.value = value;
+  input.setAttribute("aria-label", label + " color");
+  wrapper.append(text, input);
+  return { label: wrapper, input };
+}
+
+function createInlineSolidColorPicker(initialColor, onInput) {
+  const picker = document.createElement("div");
+  picker.className = "inline-color-picker";
+  const field = document.createElement("div");
+  field.className = "inline-color-field";
+  field.tabIndex = 0;
+  field.setAttribute("role", "slider");
+  field.setAttribute("aria-label", "Solid color saturation and brightness");
+  const handle = document.createElement("span");
+  handle.className = "inline-color-handle";
+  field.append(handle);
+
+  const hue = document.createElement("input");
+  hue.type = "range";
+  hue.className = "inline-color-hue";
+  hue.min = "0";
+  hue.max = "359";
+  hue.step = "1";
+  hue.setAttribute("aria-label", "Solid color hue");
+  const rgbRow = document.createElement("div");
+  rgbRow.className = "inline-color-rgb-row";
+  const redInput = createRgbChannelInput("R");
+  const greenInput = createRgbChannelInput("G");
+  const blueInput = createRgbChannelInput("B");
+  const rgbInputs = [redInput.input, greenInput.input, blueInput.input];
+  rgbRow.append(redInput.label, greenInput.label, blueInput.label);
+  picker.append(field, hue, rgbRow);
+
+  let hsv = hexToHsv(initialColor);
+
+  const emit = () => {
+    syncControls();
+    onInput(hsvToHex(hsv));
+  };
+  const updateFromPointer = (event) => {
+    const bounds = field.getBoundingClientRect();
+    hsv.saturation = clamp((event.clientX - bounds.left) / bounds.width, 0, 1);
+    hsv.value = clamp(1 - (event.clientY - bounds.top) / bounds.height, 0, 1);
+    emit();
+  };
+
+  field.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    field.setPointerCapture(event.pointerId);
+    updateFromPointer(event);
+  });
+  field.addEventListener("pointermove", (event) => {
+    if (!field.hasPointerCapture(event.pointerId)) return;
+    updateFromPointer(event);
+  });
+  field.addEventListener("pointerup", (event) => {
+    if (field.hasPointerCapture(event.pointerId)) field.releasePointerCapture(event.pointerId);
+  });
+  field.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 0.1 : 0.01;
+    if (event.key === "ArrowLeft") hsv.saturation = clamp(hsv.saturation - step, 0, 1);
+    else if (event.key === "ArrowRight") hsv.saturation = clamp(hsv.saturation + step, 0, 1);
+    else if (event.key === "ArrowUp") hsv.value = clamp(hsv.value + step, 0, 1);
+    else if (event.key === "ArrowDown") hsv.value = clamp(hsv.value - step, 0, 1);
+    else return;
+    event.preventDefault();
+    emit();
+  });
+  hue.addEventListener("input", () => {
+    hsv.hue = Number(hue.value);
+    emit();
+  });
+  for (const input of rgbInputs) {
+    input.addEventListener("change", commitRgbInputs);
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      input.blur();
+    });
   }
 
-  input.value = color;
-  onChange(color);
+  function commitRgbInputs() {
+    const values = rgbInputs.map((input) => input.value.trim());
+    const channels = values.map(Number);
+    if (values.some((value) => !/^\d{1,3}$/.test(value)) || channels.some((channel) => channel > 255)) {
+      syncControls();
+      return;
+    }
+    hsv = hexToHsv(rgbToHex({ red: channels[0], green: channels[1], blue: channels[2] }));
+    emit();
+  }
 
-  const group = input.closest(".color-input-row")?.querySelector("[data-color-presets]");
-  if (group) {
-    syncColorPresetSelection(group, color);
+  function syncControls() {
+    const color = hsvToHex(hsv);
+    const rgb = hexToRgb(color);
+    field.style.background =
+      `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hsv.hue} 100% 50%))`;
+    handle.style.left = `${hsv.saturation * 100}%`;
+    handle.style.top = `${(1 - hsv.value) * 100}%`;
+    handle.style.backgroundColor = color;
+    hue.value = String(Math.round(hsv.hue));
+    redInput.input.value = String(rgb.red);
+    greenInput.input.value = String(rgb.green);
+    blueInput.input.value = String(rgb.blue);
+    field.setAttribute("aria-valuetext", color);
+  }
+
+  syncControls();
+  return {
+    element: picker,
+    sync(color) {
+      const nextColor = hsvToHex(hexToHsv(color));
+      if (nextColor === hsvToHex(hsv)) return;
+      hsv = hexToHsv(nextColor);
+      syncControls();
+    },
+  };
+}
+
+function createRgbChannelInput(channel) {
+  const label = document.createElement("label");
+  label.className = "inline-color-rgb-channel";
+  const text = document.createElement("span");
+  text.textContent = channel;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.maxLength = 3;
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", `${channel} color channel, 0 to 255`);
+  label.append(text, input);
+  return { label, input };
+}
+
+function setColorPickerVisible(popover, isVisible) {
+  if (!popover) return;
+  if (isVisible) {
+    for (const openPopover of document.querySelectorAll("[data-color-picker-popover]:not([hidden])")) {
+      if (openPopover !== popover) setColorPickerVisible(openPopover, false);
+    }
+    if (!popover.isConnected) document.body.append(popover);
+  }
+  popover.hidden = !isVisible;
+  popover.anchorButton?.setAttribute("aria-expanded", String(isVisible));
+  if (isVisible) {
+    positionColorPicker(popover);
   }
 }
 
-function openColorPicker(input) {
-  if (typeof input.showPicker === "function") {
-    input.showPicker();
-    return;
-  }
-
-  input.click();
+function positionColorPicker(popover) {
+  const anchor = popover?.anchorButton;
+  if (!anchor?.isConnected || popover.hidden) return;
+  const anchorRect = anchor.getBoundingClientRect();
+  const margin = 8;
+  const gap = 7;
+  const width = popover.offsetWidth || 220;
+  const height = popover.offsetHeight || 120;
+  const left = Math.min(
+    window.innerWidth - width - margin,
+    Math.max(margin, anchorRect.right - width),
+  );
+  const below = anchorRect.bottom + gap;
+  const above = anchorRect.top - height - gap;
+  const top = below + height <= window.innerHeight - margin ? below : Math.max(margin, above);
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
 }
 
-function syncColorPresetSelection(group, activeColor) {
-  const normalizedActiveColor = activeColor.toLowerCase();
-  const customButton = group.querySelector("[data-custom-color]");
-  let isBaseColor = false;
-
-  for (const button of group.querySelectorAll("[data-color]")) {
-    const isActive = button.dataset.color.toLowerCase() === normalizedActiveColor;
-    isBaseColor ||= isActive;
-    button.classList.toggle("is-selected", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
+function positionOpenColorPickers() {
+  for (const popover of document.querySelectorAll("[data-color-picker-popover]:not([hidden])")) {
+    positionColorPicker(popover);
   }
+}
 
-  if (!customButton) return;
-
-  customButton.classList.toggle("is-selected", !isBaseColor);
-  customButton.classList.toggle("has-custom-color", !isBaseColor);
-  customButton.setAttribute("aria-pressed", String(!isBaseColor));
-  customButton.style.backgroundColor = isBaseColor ? "#fff" : activeColor;
+function removeColorPickerPopovers() {
+  for (const popover of document.querySelectorAll("[data-color-picker-popover]")) {
+    popover.remove();
+  }
 }
 
 function getLayerCycleColor(index) {
@@ -1377,7 +1691,7 @@ function createSpeedControl(label, valueMps, minMps, maxMps, onChange, className
   wrapper.className = ["speed-control", className].filter(Boolean).join(" ");
 
   const text = document.createElement("span");
-  text.textContent = label + " (" + unit.fieldLabel + ")";
+  text.textContent = label.toUpperCase() + " (" + unit.fieldLabel + ")";
 
   const input = document.createElement("input");
   input.type = "text";
@@ -1429,7 +1743,9 @@ function getLayerMeta(layer) {
   const stats = layer.stats ?? emptyStats();
   const kept = layer.status === "processing" ? layer.keptCount ?? 0 : layer.cleanedPoints.length;
   const displayed = layer.displayPoints.length;
-  return `raw ${formatNumber(stats.rawCount)} · kept ${formatNumber(kept)} · display ${formatNumber(displayed)}`;
+  const counts = `raw ${formatNumber(stats.rawCount)} · kept ${formatNumber(kept)} · display ${formatNumber(displayed)}`;
+  const travel = getLayerTravelSummary(layer.cleanedPoints, displaySpeedUnitId);
+  return travel ? `${counts}\n${travel.text}` : counts;
 }
 
 function emptyStats() {
@@ -2332,13 +2648,31 @@ class PointCanvasLayer {
     this.points = points;
     this.pointCount = points.length;
     this.options = options;
+    this.timeBounds = resolveColorTimeBounds(points, options);
+    this.colorRamp = options.colorMode === "gradient"
+      ? createColorRamp(options.gradientStartColor, options.gradientEndColor)
+      : null;
   }
 
   draw(ctx, map) {
-    ctx.fillStyle = this.options.color || "#2563eb";
     ctx.globalAlpha = 0.72;
     const radius = this.options.radius || 2;
     const pad = 12;
+
+    if (this.colorRamp) {
+      drawTimeGradientPoints(ctx, this.points, this.timeBounds, this.colorRamp, radius, (point) => {
+        const pixel = map.latLonToContainerPoint(point[0], point[1]);
+        return pixel.x < -pad ||
+          pixel.x > map.container.clientWidth + pad ||
+          pixel.y < -pad ||
+          pixel.y > map.container.clientHeight + pad
+          ? null
+          : pixel;
+      });
+      return;
+    }
+
+    ctx.fillStyle = this.options.color || "#2563eb";
 
     for (const point of this.points) {
       const pixel = map.latLonToContainerPoint(point[0], point[1]);
@@ -2357,12 +2691,21 @@ class PointCanvasLayer {
   }
 
   drawGlobe(ctx, map, geometry) {
-    ctx.fillStyle = this.options.color || "#2563eb";
     ctx.globalAlpha = 0.78;
     const radius = Math.max(1.6, this.options.radius || 2);
     const width = map.container.clientWidth;
     const height = map.container.clientHeight;
     const pad = radius + 2;
+
+    if (this.colorRamp) {
+      drawTimeGradientPoints(ctx, this.points, this.timeBounds, this.colorRamp, radius, (point) => {
+        const pixel = map.latLonToGlobePoint(point[0], point[1], geometry);
+        return !pixel.visible || !globePointIntersectsViewport(pixel, width, height, pad) ? null : pixel;
+      });
+      return;
+    }
+
+    ctx.fillStyle = this.options.color || "#2563eb";
 
     for (const point of this.points) {
       const pixel = map.latLonToGlobePoint(point[0], point[1], geometry);
@@ -2380,14 +2723,31 @@ class RouteCanvasLayer {
     this.pointCount = points.length;
     this.options = options;
     this.routeMetadata = buildStaticRouteMetadata(points);
+    this.timeBounds = resolveColorTimeBounds(points, options);
+    this.colorRamp = options.colorMode === "gradient"
+      ? createColorRamp(options.gradientStartColor, options.gradientEndColor)
+      : null;
   }
 
   draw(ctx, map) {
     ctx.lineWidth = this.options.width || 2;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = this.options.color || "#dc2626";
     ctx.globalAlpha = 0.84;
+
+    if (this.colorRamp) {
+      drawTimeGradientRoute(
+        ctx,
+        this.points,
+        this.routeMetadata,
+        this.timeBounds,
+        this.colorRamp,
+        (edge) => drawRouteEdgeFlat(ctx, map, edge),
+      );
+      return;
+    }
+
+    ctx.strokeStyle = this.options.color || "#dc2626";
 
     let drawing = false;
 
@@ -2415,10 +2775,22 @@ class RouteCanvasLayer {
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = this.options.color || "#dc2626";
     ctx.globalAlpha = 0.9;
 
     const pad = lineWidth + 4;
+    if (this.colorRamp) {
+      drawTimeGradientRoute(
+        ctx,
+        this.points,
+        this.routeMetadata,
+        this.timeBounds,
+        this.colorRamp,
+        (edge) => drawRouteEdgeGlobe(ctx, map, geometry, edge, 1, pad),
+      );
+      return;
+    }
+
+    ctx.strokeStyle = this.options.color || "#dc2626";
     let drawing = false;
 
     ctx.beginPath();
@@ -2439,6 +2811,76 @@ class RouteCanvasLayer {
       ctx.stroke();
     }
   }
+}
+
+function resolveColorTimeBounds(points, options) {
+  const startMs = Number(options.timeStartMs);
+  const endMs = Number(options.timeEndMs);
+  return Number.isFinite(startMs) && Number.isFinite(endMs)
+    ? { startMs, endMs }
+    : resolvePointTimeBounds(points);
+}
+
+function drawTimeGradientPoints(ctx, points, timeBounds, colorRamp, radius, projectPoint) {
+  let activeBin = -1;
+  let drawing = false;
+
+  for (const point of points) {
+    const pixel = projectPoint(point);
+    if (!pixel) continue;
+    const bin = getTimeGradientBin(point[2], timeBounds.startMs, timeBounds.endMs, colorRamp.length);
+    if (bin !== activeBin) {
+      if (drawing) ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = colorRamp[bin];
+      activeBin = bin;
+      drawing = false;
+    }
+    ctx.moveTo(pixel.x + radius, pixel.y);
+    ctx.arc(pixel.x, pixel.y, radius, 0, Math.PI * 2);
+    drawing = true;
+  }
+
+  if (drawing) ctx.fill();
+}
+
+function drawTimeGradientRoute(ctx, points, routeMetadata, timeBounds, colorRamp, drawEdge) {
+  let activeBin = -1;
+  let drawing = false;
+
+  const selectBand = (bin) => {
+    if (bin === activeBin) return;
+    if (drawing) ctx.stroke();
+    ctx.beginPath();
+    ctx.strokeStyle = colorRamp[bin];
+    activeBin = bin;
+    drawing = false;
+  };
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    if (!routeMetadata.edgeKinds[index]) {
+      if (drawing) ctx.stroke();
+      ctx.beginPath();
+      drawing = false;
+      activeBin = -1;
+      continue;
+    }
+
+    const edge = getStaticRouteEdge(points, routeMetadata, index);
+    visitTimeGradientBands(
+      points[index][2],
+      points[index + 1][2],
+      timeBounds.startMs,
+      timeBounds.endMs,
+      (startRatio, endRatio, bin) => {
+        selectBand(bin);
+        drawing = drawEdge(getRouteEdgeRange(edge, startRatio, endRatio)) || drawing;
+      },
+      colorRamp.length,
+    );
+  }
+
+  if (drawing) ctx.stroke();
 }
 
 function buildStaticRouteMetadata(points) {

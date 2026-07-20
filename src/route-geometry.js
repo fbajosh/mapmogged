@@ -137,6 +137,58 @@ function getPartialRouteEdge(edge, ratio) {
   };
 }
 
+function getRouteEdgeRange(edge, startRatio = 0, endRatio = 1) {
+  const startAmount = clamp(Number(startRatio) || 0, 0, 1);
+  const endAmount = clamp(Number(endRatio) || 0, startAmount, 1);
+  if (startAmount <= 0) return getPartialRouteEdge(edge, endAmount);
+  if (startAmount >= endAmount) {
+    const point = unwrapPointRelativeTo(interpolateRouteEdge(edge, startAmount), edge.start.lon);
+    return { ...edge, angleDegrees: 0, start: point, end: point };
+  }
+
+  if (edge.kind === ROUTE_EDGE_BEZIER) {
+    const prefix = splitBezierEdge(edge, endAmount).left;
+    return splitBezierEdge(prefix, startAmount / endAmount).right;
+  }
+
+  const start = unwrapPointRelativeTo(interpolateRouteEdge(edge, startAmount), edge.start.lon);
+  const end = unwrapPointRelativeTo(interpolateRouteEdge(edge, endAmount), start.lon);
+  return {
+    ...edge,
+    angleDegrees: edge.angleDegrees * (endAmount - startAmount),
+    start,
+    end,
+  };
+}
+
+function splitBezierEdge(edge, ratio) {
+  const amount = clamp(Number(ratio) || 0, 0, 1);
+  const firstLevel0 = interpolatePoint(edge.start, edge.control1, amount);
+  const firstLevel1 = interpolatePoint(edge.control1, edge.control2, amount);
+  const firstLevel2 = interpolatePoint(edge.control2, edge.end, amount);
+  const secondLevel0 = interpolatePoint(firstLevel0, firstLevel1, amount);
+  const secondLevel1 = interpolatePoint(firstLevel1, firstLevel2, amount);
+  const endpoint = interpolatePoint(secondLevel0, secondLevel1, amount);
+  return {
+    left: {
+      kind: ROUTE_EDGE_BEZIER,
+      angleDegrees: edge.angleDegrees * amount,
+      start: edge.start,
+      control1: firstLevel0,
+      control2: secondLevel0,
+      end: endpoint,
+    },
+    right: {
+      kind: ROUTE_EDGE_BEZIER,
+      angleDegrees: edge.angleDegrees * (1 - amount),
+      start: endpoint,
+      control1: secondLevel1,
+      control2: firstLevel2,
+      end: edge.end,
+    },
+  };
+}
+
 function getRouteEdgeBoundsPoints(edge, ratio = 1) {
   const partial = getPartialRouteEdge(edge, ratio);
   if (partial.kind === ROUTE_EDGE_BEZIER) {
@@ -333,6 +385,7 @@ export {
   createRouteEdge,
   getGreatCircleStepCount,
   getPartialRouteEdge,
+  getRouteEdgeRange,
   getRouteEdgeBoundsPoints,
   interpolateRouteEdge,
 };

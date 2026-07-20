@@ -28,6 +28,31 @@ test("draws preview, completed route, and marker in flat and globe modes", () =>
   assert.ok(operations.includes("arc"));
 });
 
+test("colors a sparse playback route and marker by elapsed track time", () => {
+  const sequence = buildPlaybackSequence(
+    [{
+      id: 1,
+      status: "ready",
+      color: "#2563eb",
+      colorMode: "gradient",
+      gradientStartColor: "#000000",
+      gradientEndColor: "#ffffff",
+      size: 2,
+      cleanedPoints: [[0, 0, 0], [0, 1, 1000]],
+    }],
+    1000,
+  );
+  const strokeStyles = [];
+  const fillStyles = [];
+  const layer = new PlaybackCanvasLayer(sequence, { previewAlpha: 0 });
+  layer.setSnapshot(samplePlaybackAt(sequence, 1000));
+  layer.draw(makeContext([], [], [], strokeStyles, fillStyles), makeMap());
+
+  assert.ok(strokeStyles.includes("#000000"));
+  assert.ok(strokeStyles.includes("#ffffff"));
+  assert.ok(fillStyles.includes("#ffffff"));
+});
+
 test("can smooth tracking while retaining full source path geometry", () => {
   const sequence = buildPlaybackSequence(
     [{
@@ -126,7 +151,7 @@ test("keeps a partially revealed great-circle path connected to its marker", () 
   assert.ok(pointsAlmostEqual(lineHead, markers[0]));
 });
 
-function makeContext(operations, markers = [], curves = []) {
+function makeContext(operations, markers = [], curves = [], strokeStyles = [], fillStyles = []) {
   return {
     beginPath: () => operations.push("beginPath"),
     moveTo: () => operations.push("moveTo"),
@@ -150,8 +175,8 @@ function makeContext(operations, markers = [], curves = []) {
     set lineWidth(value) {},
     set lineJoin(value) {},
     set lineCap(value) {},
-    set strokeStyle(value) {},
-    set fillStyle(value) {},
+    set strokeStyle(value) { strokeStyles.push(value); },
+    set fillStyle(value) { fillStyles.push(value); },
     set globalAlpha(value) {},
   };
 }
