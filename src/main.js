@@ -24,6 +24,7 @@ import {
 } from "./date-filter.js";
 import { getLayerTravelSummary } from "./layer-summary.js";
 import { createInlineColorPicker } from "./color-picker-control.js";
+import { alignWrappedX, getVisibleWorldShifts } from "./world-wrap.js";
 
 const DEFAULT_CENTER = [39.5, -98.35];
 const DEFAULT_ZOOM = 4;
@@ -1936,34 +1937,49 @@ class TimelineMap {
     }
   }
 
-  latLonToContainerPoint(lat, lon) {
+  getWorldPixelSize() {
+    return TILE_SIZE * 2 ** this.zoom;
+  }
+
+  latLonToContainerPoint(lat, lon, referenceX = null) {
     const point = projectLatLon(lat, lon, this.zoom);
-    const worldSize = TILE_SIZE * 2 ** this.zoom;
+    const worldSize = this.getWorldPixelSize();
     const center = projectLatLon(this.center.lat, this.center.lon, this.zoom);
     point.x += Math.round((center.x - point.x) / worldSize) * worldSize;
     const topLeft = this.getTopLeft();
-    return {
+    const projected = {
       x: point.x - topLeft.x,
       y: point.y - topLeft.y,
     };
+    if (Number.isFinite(referenceX)) {
+      projected.x = alignWrappedX(projected.x, referenceX, worldSize);
+    }
+    return projected;
+  }
+
+  getVisibleWorldShifts(points, pad = 64) {
+    return getVisibleWorldShifts(
+      points,
+      this.container.clientWidth,
+      this.container.clientHeight,
+      this.getWorldPixelSize(),
+      pad,
+    );
   }
 
   segmentIntersectsView(startPoint, endPoint, pad = 64) {
     const start = this.latLonToContainerPoint(startPoint[0], startPoint[1]);
-    const end = this.latLonToContainerPoint(endPoint[0], endPoint[1]);
-    const minX = Math.min(start.x, end.x);
-    const maxX = Math.max(start.x, end.x);
-    const minY = Math.min(start.y, end.y);
-    const maxY = Math.max(start.y, end.y);
+    const end = this.latLonToContainerPoint(endPoint[0], endPoint[1], start.x);
+    const segments = this.getVisibleWorldShifts([start, end], pad).map((shift) => ({
+      start: { x: start.x + shift, y: start.y },
+      end: { x: end.x + shift, y: end.y },
+    }));
 
     return {
-      end,
-      start,
-      visible:
-        maxX >= -pad &&
-        minX <= this.container.clientWidth + pad &&
-        maxY >= -pad &&
-        minY <= this.container.clientHeight + pad,
+      end: segments[0]?.end ?? end,
+      start: segments[0]?.start ?? start,
+      segments,
+      visible: segments.length > 0,
     };
   }
 

@@ -10,13 +10,23 @@ function drawRouteEdgeFlat(ctx, map, edge, ratio = 1, pad = 64) {
   const partial = getPartialRouteEdge(edge, ratio);
   if (partial.kind === ROUTE_EDGE_BEZIER && typeof ctx.bezierCurveTo === "function") {
     const start = projectFlat(map, partial.start);
-    const control1 = projectFlat(map, partial.control1);
-    const control2 = projectFlat(map, partial.control2);
-    const end = projectFlat(map, partial.end);
-    if (!projectedCurveIntersectsViewport(map, [start, control1, control2, end], pad)) return false;
-    ctx.moveTo(start.x, start.y);
-    ctx.bezierCurveTo(control1.x, control1.y, control2.x, control2.y, end.x, end.y);
-    return true;
+    const control1 = projectFlat(map, partial.control1, start.x);
+    const control2 = projectFlat(map, partial.control2, control1.x);
+    const end = projectFlat(map, partial.end, control2.x);
+    const points = [start, control1, control2, end];
+    const shifts = getVisibleWorldShifts(map, points, pad);
+    for (const shift of shifts) {
+      ctx.moveTo(start.x + shift, start.y);
+      ctx.bezierCurveTo(
+        control1.x + shift,
+        control1.y,
+        control2.x + shift,
+        control2.y,
+        end.x + shift,
+        end.y,
+      );
+    }
+    return shifts.length > 0;
   }
 
   if (partial.kind === ROUTE_EDGE_GREAT_CIRCLE) {
@@ -69,13 +79,16 @@ function drawRouteEdgeGlobe(ctx, map, geometry, edge, ratio = 1, pad = 8) {
 function drawFlatLine(ctx, map, start, end, pad) {
   const segment = map.segmentIntersectsView([start.lat, start.lon], [end.lat, end.lon], pad);
   if (!segment.visible) return false;
-  ctx.moveTo(segment.start.x, segment.start.y);
-  ctx.lineTo(segment.end.x, segment.end.y);
+  const visibleSegments = segment.segments?.length ? segment.segments : [segment];
+  for (const visible of visibleSegments) {
+    ctx.moveTo(visible.start.x, visible.start.y);
+    ctx.lineTo(visible.end.x, visible.end.y);
+  }
   return true;
 }
 
-function projectFlat(map, point) {
-  return map.latLonToContainerPoint(point.lat, point.lon);
+function projectFlat(map, point, referenceX = null) {
+  return map.latLonToContainerPoint(point.lat, point.lon, referenceX);
 }
 
 function projectGlobe(map, geometry, point) {
@@ -92,6 +105,13 @@ function projectedCurveIntersectsViewport(map, points, pad) {
     Math.min(...xs) <= width + pad &&
     Math.max(...ys) >= -pad &&
     Math.min(...ys) <= height + pad;
+}
+
+function getVisibleWorldShifts(map, points, pad) {
+  if (typeof map.getVisibleWorldShifts === "function") {
+    return map.getVisibleWorldShifts(points, pad);
+  }
+  return projectedCurveIntersectsViewport(map, points, pad) ? [0] : [];
 }
 
 function projectedLineIntersectsViewport(map, start, end, pad) {

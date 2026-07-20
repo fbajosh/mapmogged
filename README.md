@@ -64,6 +64,8 @@ The map is drawn with browser-native code and canvas overlays. Flat map mode can
 
 For performance, the renderer only draws visible points and visible route segments for the current view. Points or line segments behind the globe or outside the viewport are skipped during rendering.
 
+In flat view, route projection preserves longitude continuity across the antimeridian and draws visible wrapped copies at both map edges instead of a world-spanning seam line.
+
 ## Timeline Playback
 
 After every uploaded layer finishes processing, the play control below Map settings opens timeline playback. Ready layers are appended in their displayed order; each layer completes before the next starts, even when their source dates overlap. Playback uses cleaned timestamped points rather than point-mode display deduplication, and it never draws or measures a connecting jump between separate layers.

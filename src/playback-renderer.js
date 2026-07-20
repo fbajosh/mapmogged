@@ -338,7 +338,10 @@ function drawCompleteEdges(path, endIndex, step, drawEdge) {
 function drawFlatMarker(ctx, map, segment, snapshot, colorRamp, nodeMode, nodeSize, path) {
   const point = map.latLonToContainerPoint(snapshot.lat, snapshot.lon);
   const heading = nodeMode === "arrow"
-    ? getMarkerHeading(path, (candidate) => map.latLonToContainerPoint(candidate.lat, candidate.lon))
+    ? getMarkerHeading(
+      path,
+      (candidate, referenceX) => map.latLonToContainerPoint(candidate.lat, candidate.lon, referenceX),
+    )
     : 0;
   drawMarker(ctx, point, segment, snapshot, colorRamp, nodeMode, nodeSize, heading);
 }
@@ -441,7 +444,7 @@ function getEdgeHeading(path, edgeIndex, startRatio, endRatio, projectPoint) {
   }
   const edge = getPackedRouteEdge(path, edgeIndex);
   const start = projectPoint(interpolateRouteEdge(edge, startRatio));
-  const end = projectPoint(interpolateRouteEdge(edge, endRatio));
+  const end = projectPoint(interpolateRouteEdge(edge, endRatio), start.x);
   const deltaX = Number(end?.x) - Number(start?.x);
   const deltaY = Number(end?.y) - Number(start?.y);
   if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY) || Math.hypot(deltaX, deltaY) < 1e-6) {
