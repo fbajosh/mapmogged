@@ -1,6 +1,15 @@
 import { PlaybackFeature } from "./playback-feature.js";
 import { getFitCameraTarget } from "./playback-camera.js";
 import {
+  angularDistanceDegrees,
+  classifyRouteAngle,
+  createRouteEdge,
+} from "./route-geometry.js";
+import { drawRouteEdgeFlat, drawRouteEdgeGlobe } from "./route-canvas.js";
+import {
+  ceilDateTimeToMinute,
+  filterPointsByDate,
+  floorDateTimeToMinute,
   formatDateTimeLocal,
   isValidDateInterval,
   parseDateTimeLocal,
@@ -21,6 +30,8 @@ const TAP_MAX_DURATION_MS = 280;
 const TAP_MAX_DISTANCE_PX = 12;
 const DOUBLE_TAP_DELAY_MS = 320;
 const DOUBLE_TAP_DISTANCE_PX = 48;
+const AUTO_REPROCESS_DELAY_MS = 150;
+const TIMELINE_WORKER_REVISION = "2026-07-20-date-filter";
 const MAX_LATITUDE = 85.05112878;
 const GLOBE_MIN_ZOOM = 2;
 const GLOBE_MAX_ZOOM = 7;
@@ -352,6 +363,8 @@ function createUploadLayer(file) {
     displayPoints: [],
     canvasLayer: null,
     worker: null,
+    reprocessTimer: null,
+    processingRevision: 0,
     error: "",
   };
 }
@@ -359,6 +372,7 @@ function createUploadLayer(file) {
 function enqueueProcessLayer(layer) {
   playbackFeature?.invalidateData();
   cancelLayerWork(layer);
+  layer.processingRevision += 1;
   layer.status = "queued";
   layer.progress = 0;
   layer.error = "";
@@ -386,10 +400,14 @@ function processNextLayer() {
   layer.progress = 0;
   renderLayerList();
 
-  const worker = new Worker(new URL("./timeline-worker.js", import.meta.url), { type: "module" });
+  const workerUrl = new URL("./timeline-worker.js", import.meta.url);
+  workerUrl.searchParams.set("revision", TIMELINE_WORKER_REVISION);
+  const worker = new Worker(workerUrl, { type: "module" });
+  const processingRevision = layer.processingRevision;
   layer.worker = worker;
 
   worker.addEventListener("message", (event) => {
+    if (worker !== layer.worker || processingRevision !== layer.processingRevision) return;
     const message = event.data;
 
     if (message.type === "progress") {
@@ -407,8 +425,12 @@ function processNextLayer() {
       layer.status = "ready";
       layer.progress = 100;
       layer.stats = message.stats;
-      layer.cleanedPoints = message.points;
       initializeLayerDateBounds(layer, message.stats, message.points);
+      layer.cleanedPoints = filterPointsByDate(message.points, {
+        dateRangeStartMs: layer.dateRangeStartMs,
+        dateRangeEndMs: layer.dateRangeEndMs,
+        dateExclusions: layer.dateExclusions,
+      });
       layer.worker = null;
       worker.terminate();
       activeProcessingLayer = null;
@@ -429,6 +451,7 @@ function processNextLayer() {
   });
 
   worker.addEventListener("error", (event) => {
+    if (worker !== layer.worker || processingRevision !== layer.processingRevision) return;
     markLayerError(layer, event.message || "Worker failed");
     worker.terminate();
     activeProcessingLayer = null;
@@ -458,6 +481,11 @@ function markLayerError(layer, error) {
 
 function cancelLayerWork(layer) {
   processQueue = processQueue.filter((id) => id !== layer.id);
+
+  if (layer.reprocessTimer !== null) {
+    window.clearTimeout(layer.reprocessTimer);
+    layer.reprocessTimer = null;
+  }
 
   if (layer.worker) {
     layer.worker.terminate();
@@ -721,11 +749,7 @@ function createLayerCard(layer) {
 
   const reprocessButton = createIconButton("refresh", "Reprocess layer");
   reprocessButton.disabled = layer.status === "processing";
-  reprocessButton.addEventListener("click", () => {
-    enqueueProcessLayer(layer);
-    renderLayerList();
-    renderAllMapLayers();
-  });
+  reprocessButton.addEventListener("click", () => reprocessLayer(layer));
 
   const deleteButton = createIconButton("close", "Delete layer");
   deleteButton.addEventListener("click", () => {
@@ -968,18 +992,25 @@ function createDateTimeControl(label, valueMs, minMs, maxMs, onChange, className
   text.textContent = label;
   const input = document.createElement("input");
   input.type = "datetime-local";
-  input.step = "0.001";
+  input.step = "60";
   input.value = formatDateTimeLocal(valueMs);
   input.min = formatDateTimeLocal(minMs);
   input.max = formatDateTimeLocal(maxMs);
   input.setAttribute("aria-label", label);
-  input.addEventListener("change", () => {
+  const commit = () => {
     const next = parseDateTimeLocal(input.value);
+    if (next === valueMs) return;
     if (Number.isFinite(next) && onChange(next)) return;
     input.value = formatDateTimeLocal(valueMs);
     input.setCustomValidity("Choose an ordered datetime within the available dataset range.");
     input.reportValidity();
     input.setCustomValidity("");
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    input.blur();
   });
   if (!options.hideLabel) wrapper.append(text);
   wrapper.append(input);
@@ -997,8 +1028,8 @@ function initializeLayerDateBounds(layer, stats, points) {
     return;
   }
 
-  const minimum = bounds.startMs;
-  const maximum = bounds.endMs;
+  const minimum = floorDateTimeToMinute(bounds.startMs);
+  const maximum = ceilDateTimeToMinute(bounds.endMs);
   layer.availableStartMs = minimum;
   layer.availableEndMs = maximum;
   if (!isValidDateInterval(layer.dateRangeStartMs, layer.dateRangeEndMs, minimum, maximum)) {
@@ -1023,7 +1054,7 @@ function updateLayerDateRange(layer, field, value) {
   const endMs = field === "dateRangeEndMs" ? value : layer.dateRangeEndMs;
   if (!isValidDateInterval(startMs, endMs, layer.availableStartMs, layer.availableEndMs)) return false;
   layer[field] = value;
-  renderLayerList();
+  queueLayerReprocess(layer);
   return true;
 }
 
@@ -1031,12 +1062,13 @@ function addDateExclusion(layer) {
   if (!hasLayerDateBounds(layer)) return;
   const previousEndMs = layer.dateExclusions.at(-1)?.endMs;
   const startMs = Number.isFinite(previousEndMs)
-    ? Math.min(previousEndMs + 1000, layer.dateRangeEndMs)
+    ? Math.min(previousEndMs + 60_000, layer.dateRangeEndMs)
     : layer.dateRangeStartMs;
   const endMs = Math.min(startMs + 24 * 60 * 60 * 1000, layer.dateRangeEndMs);
   layer.dateExclusions.push({ id: nextDateExclusionId++, startMs, endMs });
   layer.activeSettingsTab = "exclusions";
   renderLayerList();
+  queueLayerReprocess(layer);
 }
 
 function updateDateExclusion(layer, id, field, value) {
@@ -1046,13 +1078,29 @@ function updateDateExclusion(layer, id, field, value) {
   const endMs = field === "endMs" ? value : exclusion.endMs;
   if (!isValidDateInterval(startMs, endMs, layer.availableStartMs, layer.availableEndMs)) return false;
   exclusion[field] = value;
-  renderLayerList();
+  queueLayerReprocess(layer);
   return true;
 }
 
 function removeDateExclusion(layer, id) {
   layer.dateExclusions = layer.dateExclusions.filter((exclusion) => exclusion.id !== id);
   renderLayerList();
+  queueLayerReprocess(layer);
+}
+
+function queueLayerReprocess(layer) {
+  if (layer.reprocessTimer !== null) window.clearTimeout(layer.reprocessTimer);
+  layer.reprocessTimer = window.setTimeout(() => {
+    layer.reprocessTimer = null;
+    if (!uploadLayers.includes(layer)) return;
+    reprocessLayer(layer);
+  }, AUTO_REPROCESS_DELAY_MS);
+}
+
+function reprocessLayer(layer) {
+  enqueueProcessLayer(layer);
+  renderLayerList();
+  renderAllMapLayers();
 }
 
 function createSegmentedControl(name, label, value, options, onChange) {
@@ -2331,6 +2379,7 @@ class RouteCanvasLayer {
     this.points = points;
     this.pointCount = points.length;
     this.options = options;
+    this.routeMetadata = buildStaticRouteMetadata(points);
   }
 
   draw(ctx, map) {
@@ -2340,35 +2389,20 @@ class RouteCanvasLayer {
     ctx.strokeStyle = this.options.color || "#dc2626";
     ctx.globalAlpha = 0.84;
 
-    let previous = null;
-    let previousYear = null;
     let drawing = false;
 
     ctx.beginPath();
-    for (const point of this.points) {
-      const year = point[5];
-
-      if (!previous || year !== previousYear) {
+    for (let index = 0; index < this.points.length - 1; index += 1) {
+      if (!this.routeMetadata.edgeKinds[index]) {
         if (drawing) {
           ctx.stroke();
           ctx.beginPath();
           drawing = false;
         }
-        previous = point;
-        previousYear = year;
         continue;
       }
-
-      const segment = map.segmentIntersectsView(previous, point);
-      if (segment.visible) {
-        const { start, end } = segment;
-        ctx.moveTo(start.x, start.y);
-        ctx.lineTo(end.x, end.y);
-        drawing = true;
-      }
-
-      previous = point;
-      previousYear = year;
+      const edge = getStaticRouteEdge(this.points, this.routeMetadata, index);
+      drawing = drawRouteEdgeFlat(ctx, map, edge) || drawing;
     }
 
     if (drawing) {
@@ -2384,42 +2418,53 @@ class RouteCanvasLayer {
     ctx.strokeStyle = this.options.color || "#dc2626";
     ctx.globalAlpha = 0.9;
 
-    const width = map.container.clientWidth;
-    const height = map.container.clientHeight;
     const pad = lineWidth + 4;
-    let previousProjection = null;
-    let previousYear = null;
     let drawing = false;
 
     ctx.beginPath();
-    for (const point of this.points) {
-      const year = point[5];
-      const projection = map.latLonToGlobePoint(point[0], point[1], geometry);
-
-      if (!previousProjection || year !== previousYear) {
-        previousProjection = projection;
-        previousYear = year;
+    for (let index = 0; index < this.points.length - 1; index += 1) {
+      if (!this.routeMetadata.edgeKinds[index]) {
+        if (drawing) {
+          ctx.stroke();
+          ctx.beginPath();
+          drawing = false;
+        }
         continue;
       }
-
-      if (
-        previousProjection.visible &&
-        projection.visible &&
-        globeSegmentIntersectsViewport(previousProjection, projection, width, height, pad)
-      ) {
-        ctx.moveTo(previousProjection.x, previousProjection.y);
-        ctx.lineTo(projection.x, projection.y);
-        drawing = true;
-      }
-
-      previousProjection = projection;
-      previousYear = year;
+      const edge = getStaticRouteEdge(this.points, this.routeMetadata, index);
+      drawing = drawRouteEdgeGlobe(ctx, map, geometry, edge, 1, pad) || drawing;
     }
 
     if (drawing) {
       ctx.stroke();
     }
   }
+}
+
+function buildStaticRouteMetadata(points) {
+  const edgeCount = Math.max(0, points.length - 1);
+  const edgeKinds = new Uint8Array(edgeCount);
+  const edgeAngles = new Float32Array(edgeCount);
+  for (let index = 0; index < edgeCount; index += 1) {
+    if (points[index][5] !== points[index + 1][5]) continue;
+    const angleDegrees = angularDistanceDegrees(points[index], points[index + 1]);
+    edgeKinds[index] = classifyRouteAngle(angleDegrees);
+    edgeAngles[index] = angleDegrees;
+  }
+  return { edgeKinds, edgeAngles };
+}
+
+function getStaticRouteEdge(points, routeMetadata, edgeIndex) {
+  return createRouteEdge(
+    edgeIndex > 0 && routeMetadata.edgeKinds[edgeIndex - 1] ? points[edgeIndex - 1] : null,
+    points[edgeIndex],
+    points[edgeIndex + 1],
+    routeMetadata.edgeKinds[edgeIndex + 1] ? points[edgeIndex + 2] : null,
+    {
+      kind: routeMetadata.edgeKinds[edgeIndex],
+      angleDegrees: routeMetadata.edgeAngles[edgeIndex],
+    },
+  );
 }
 
 function createMapControls() {
@@ -2556,15 +2601,6 @@ function getGlobeViewportBounds(geometry, viewport) {
 
 function globePointIntersectsViewport(point, width, height, pad = 0) {
   return point.x >= -pad && point.x <= width + pad && point.y >= -pad && point.y <= height + pad;
-}
-
-function globeSegmentIntersectsViewport(start, end, width, height, pad = 0) {
-  return (
-    Math.max(start.x, end.x) >= -pad &&
-    Math.min(start.x, end.x) <= width + pad &&
-    Math.max(start.y, end.y) >= -pad &&
-    Math.min(start.y, end.y) <= height + pad
-  );
 }
 
 function getGlobeTheme() {

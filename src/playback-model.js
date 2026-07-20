@@ -1,3 +1,10 @@
+import {
+  angularDistanceDegrees,
+  classifyRouteAngle,
+  createRouteEdge,
+  interpolateRouteEdge,
+} from "./route-geometry.js";
+
 const EARTH_RADIUS_M = 6371e3;
 const MAX_PLAYBACK_SAMPLES = 500_000;
 const SAMPLE_STRIDE = 4;
@@ -62,8 +69,10 @@ function buildPlaybackSequence(layers, intervalMs, options = {}) {
     const sourceEndMs = points.at(-1).timeMs;
     const durationMs = sourceEndMs - sourceStartMs;
     const cumulativeDistances = buildCumulativeDistances(points);
-    const samples = resamplePoints(points, cumulativeDistances, normalizedIntervalMs);
+    const sourceRoute = buildRouteMetadata(points.length, (index) => points[index]);
+    const samples = resamplePoints(points, cumulativeDistances, normalizedIntervalMs, sourceRoute);
     const sourceSamples = buildSourceSamples(points, cumulativeDistances);
+    const sampleRoute = buildPackedRouteMetadata(samples);
     const distanceM = cumulativeDistances.at(-1) ?? 0;
 
     segments.push({
@@ -78,8 +87,10 @@ function buildPlaybackSequence(layers, intervalMs, options = {}) {
       distanceM,
       sampleCount: samples.length / SAMPLE_STRIDE,
       samples,
+      sampleRoute,
       sourceSampleCount: sourceSamples.length / SAMPLE_STRIDE,
       sourceSamples,
+      sourceRoute,
     });
 
     sourceDurationMs += durationMs;
@@ -156,12 +167,14 @@ function getMinimumIntervalForSampleLimit(playable, maxSamples) {
   return low;
 }
 
-function resamplePoints(points, cumulativeDistances, intervalMs) {
+function resamplePoints(points, cumulativeDistances, intervalMs, routeMetadata) {
   const startMs = points[0].timeMs;
   const durationMs = points.at(-1).timeMs - startMs;
   const sampleCount = getResampledCount(durationMs, intervalMs);
   const samples = new Float64Array(sampleCount * SAMPLE_STRIDE);
   let sourceIndex = 0;
+  let routeEdge = null;
+  let routeEdgeIndex = -1;
 
   for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex += 1) {
     const isLast = sampleIndex === sampleCount - 1;
@@ -178,8 +191,13 @@ function resamplePoints(points, cumulativeDistances, intervalMs) {
     const ratio = edgeDuration > 0 ? clamp((targetMs - start.timeMs) / edgeDuration, 0, 1) : 0;
     const edgeDistance = cumulativeDistances[sourceIndex + 1] - cumulativeDistances[sourceIndex];
     const offset = sampleIndex * SAMPLE_STRIDE;
-    samples[offset] = interpolate(start.lat, end.lat, ratio);
-    samples[offset + 1] = interpolateLongitude(start.lon, end.lon, ratio);
+    if (routeEdgeIndex !== sourceIndex) {
+      routeEdge = getObjectRouteEdge(points, sourceIndex, routeMetadata);
+      routeEdgeIndex = sourceIndex;
+    }
+    const position = interpolateRouteEdge(routeEdge, ratio);
+    samples[offset] = position.lat;
+    samples[offset + 1] = position.lon;
     samples[offset + 2] = localElapsedMs;
     samples[offset + 3] = cumulativeDistances[sourceIndex] + edgeDistance * ratio;
   }
@@ -206,9 +224,19 @@ function samplePlaybackAt(sequence, sourceElapsedMs, options = {}) {
   const segmentIndex = findSegmentIndex(sequence.segments, elapsedMs, sequence.sourceDurationMs);
   const segment = sequence.segments[segmentIndex];
   const localElapsedMs = clamp(elapsedMs - segment.sequenceStartMs, 0, segment.durationMs);
-  const timedSample = sampleTimedPathAt(segment.samples, segment.sampleCount, localElapsedMs);
+  const timedSample = sampleTimedPathAt(
+    segment.samples,
+    segment.sampleCount,
+    localElapsedMs,
+    segment.sampleRoute,
+  );
   const position = options.pathMode === "tracking-only"
-    ? samplePathAtDistance(segment.sourceSamples, segment.sourceSampleCount, timedSample.distanceM)
+    ? samplePathAtDistance(
+      segment.sourceSamples,
+      segment.sourceSampleCount,
+      timedSample.distanceM,
+      segment.sourceRoute,
+    )
     : timedSample;
 
   return {
@@ -228,12 +256,14 @@ function samplePlaybackAt(sequence, sourceElapsedMs, options = {}) {
   };
 }
 
-function samplePathAtDistance(samples, sampleCount, distanceM) {
+function samplePathAtDistance(samples, sampleCount, distanceM, routeMetadata = null) {
   const distance = Math.max(0, Number(distanceM) || 0);
   const last = sampleCount - 1;
   const lastDistance = samples[last * SAMPLE_STRIDE + 3];
-  if (distance <= 0) return getInterpolatedSample(samples, 0, 0, 0);
-  if (distance >= lastDistance) return getInterpolatedSample(samples, last, last, 0);
+  if (distance <= 0) return getInterpolatedSample(samples, sampleCount, 0, 0, 0, routeMetadata);
+  if (distance >= lastDistance) {
+    return getInterpolatedSample(samples, sampleCount, last, last, 0, routeMetadata);
+  }
 
   let low = 0;
   let high = last;
@@ -247,7 +277,7 @@ function samplePathAtDistance(samples, sampleCount, distanceM) {
   const startDistance = samples[low * SAMPLE_STRIDE + 3];
   const endDistance = samples[high * SAMPLE_STRIDE + 3];
   const ratio = endDistance > startDistance ? (distance - startDistance) / (endDistance - startDistance) : 0;
-  return getInterpolatedSample(samples, low, high, ratio);
+  return getInterpolatedSample(samples, sampleCount, low, high, ratio, routeMetadata);
 }
 
 function findSegmentIndex(segments, elapsedMs, totalDurationMs) {
@@ -268,21 +298,77 @@ function findSegmentIndex(segments, elapsedMs, totalDurationMs) {
   return low;
 }
 
-function sampleTimedPathAt(samples, sampleCount, localElapsedMs) {
+function sampleTimedPathAt(samples, sampleCount, localElapsedMs, routeMetadata = null) {
   const { startIndex, endIndex, ratio } = findSampleRange(samples, sampleCount, localElapsedMs);
-  return getInterpolatedSample(samples, startIndex, endIndex, ratio);
+  return getInterpolatedSample(samples, sampleCount, startIndex, endIndex, ratio, routeMetadata);
 }
 
-function getInterpolatedSample(samples, startIndex, endIndex, ratio) {
+function getInterpolatedSample(samples, sampleCount, startIndex, endIndex, ratio, routeMetadata) {
   const startOffset = startIndex * SAMPLE_STRIDE;
   const endOffset = endIndex * SAMPLE_STRIDE;
+  const position = startIndex === endIndex
+    ? { lat: samples[startOffset], lon: samples[startOffset + 1] }
+    : interpolateRouteEdge(
+      getPackedRouteEdge(samples, sampleCount, startIndex, routeMetadata),
+      ratio,
+    );
   return {
     startIndex,
     endIndex,
     ratio,
-    lat: interpolate(samples[startOffset], samples[endOffset], ratio),
-    lon: interpolateLongitude(samples[startOffset + 1], samples[endOffset + 1], ratio),
+    lat: position.lat,
+    lon: position.lon,
     distanceM: interpolate(samples[startOffset + 3], samples[endOffset + 3], ratio),
+  };
+}
+
+function buildPackedRouteMetadata(samples) {
+  const sampleCount = samples.length / SAMPLE_STRIDE;
+  return buildRouteMetadata(sampleCount, (index) => getPackedPoint(samples, index));
+}
+
+function buildRouteMetadata(pointCount, getPoint) {
+  const edgeCount = Math.max(0, pointCount - 1);
+  const edgeKinds = new Uint8Array(edgeCount);
+  const edgeAngles = new Float32Array(edgeCount);
+  for (let index = 0; index < edgeCount; index += 1) {
+    const angleDegrees = angularDistanceDegrees(getPoint(index), getPoint(index + 1));
+    edgeKinds[index] = classifyRouteAngle(angleDegrees);
+    edgeAngles[index] = angleDegrees;
+  }
+  return { edgeKinds, edgeAngles };
+}
+
+function getObjectRouteEdge(points, edgeIndex, routeMetadata) {
+  return createRouteEdge(
+    edgeIndex > 0 ? points[edgeIndex - 1] : null,
+    points[edgeIndex],
+    points[edgeIndex + 1],
+    edgeIndex + 2 < points.length ? points[edgeIndex + 2] : null,
+    getRouteEdgeOptions(routeMetadata, edgeIndex),
+  );
+}
+
+function getPackedRouteEdge(samples, sampleCount, edgeIndex, routeMetadata = null) {
+  return createRouteEdge(
+    edgeIndex > 0 ? getPackedPoint(samples, edgeIndex - 1) : null,
+    getPackedPoint(samples, edgeIndex),
+    getPackedPoint(samples, edgeIndex + 1),
+    edgeIndex + 2 < sampleCount ? getPackedPoint(samples, edgeIndex + 2) : null,
+    getRouteEdgeOptions(routeMetadata, edgeIndex),
+  );
+}
+
+function getPackedPoint(samples, index) {
+  const offset = index * SAMPLE_STRIDE;
+  return { lat: samples[offset], lon: samples[offset + 1] };
+}
+
+function getRouteEdgeOptions(routeMetadata, edgeIndex) {
+  if (!routeMetadata?.edgeKinds || !routeMetadata?.edgeAngles) return {};
+  return {
+    kind: routeMetadata.edgeKinds[edgeIndex],
+    angleDegrees: routeMetadata.edgeAngles[edgeIndex],
   };
 }
 
@@ -430,16 +516,8 @@ function interpolate(start, end, ratio) {
   return start + (end - start) * ratio;
 }
 
-function interpolateLongitude(start, end, ratio) {
-  return wrapLongitude(start + shortestLongitudeDelta(start, end) * ratio);
-}
-
 function shortestLongitudeDelta(start, end) {
   return ((end - start + 540) % 360) - 180;
-}
-
-function wrapLongitude(longitude) {
-  return ((longitude + 540) % 360) - 180;
 }
 
 function toRadians(degrees) {

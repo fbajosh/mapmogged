@@ -17,6 +17,20 @@ function getDateFilterReason(timeMs, options = {}) {
   return "";
 }
 
+function filterPointsByDate(points, options = {}) {
+  const source = points ?? [];
+  let filtered = null;
+  for (let index = 0; index < source.length; index += 1) {
+    const point = source[index];
+    if (getDateFilterReason(point?.[2], options)) {
+      if (!filtered) filtered = source.slice(0, index);
+    } else if (filtered) {
+      filtered.push(point);
+    }
+  }
+  return filtered ?? source;
+}
+
 function isValidDateInterval(startMs, endMs, minimumMs, maximumMs) {
   const values = [startMs, endMs, minimumMs, maximumMs];
   if (!values.every(Number.isFinite)) return false;
@@ -31,17 +45,30 @@ function formatDateTimeLocal(timeMs) {
   const datePart = [date.getFullYear(), date.getMonth() + 1, date.getDate()]
     .map((value, index) => String(value).padStart(index === 0 ? 4 : 2, "0"))
     .join("-");
-  const timePart = [date.getHours(), date.getMinutes(), date.getSeconds()]
+  const timePart = [date.getHours(), date.getMinutes()]
     .map((value) => String(value).padStart(2, "0"))
     .join(":");
-  const milliseconds = date.getMilliseconds();
-  return `${datePart}T${timePart}${milliseconds ? `.${String(milliseconds).padStart(3, "0")}` : ""}`;
+  return `${datePart}T${timePart}`;
 }
 
 function parseDateTimeLocal(value) {
   const text = String(value ?? "").trim();
   if (!text) return NaN;
   return new Date(text).getTime();
+}
+
+function floorDateTimeToMinute(timeMs) {
+  const date = new Date(Number(timeMs));
+  if (!Number.isFinite(date.getTime())) return NaN;
+  date.setSeconds(0, 0);
+  return date.getTime();
+}
+
+function ceilDateTimeToMinute(timeMs) {
+  const value = Number(timeMs);
+  const floor = floorDateTimeToMinute(value);
+  if (!Number.isFinite(floor)) return NaN;
+  return value > floor ? floor + 60_000 : floor;
 }
 
 function resolveDateBounds(stats, points = []) {
@@ -65,6 +92,9 @@ function resolveDateBounds(stats, points = []) {
 }
 
 export {
+  ceilDateTimeToMinute,
+  filterPointsByDate,
+  floorDateTimeToMinute,
   formatDateTimeLocal,
   getDateFilterReason,
   isValidDateInterval,

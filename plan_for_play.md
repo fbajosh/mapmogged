@@ -16,8 +16,8 @@ These decisions make the idea concrete enough to implement without stopping for 
 4. **Source duration:** the total source duration is the sum of `(last timestamp - first timestamp)` for each playable layer. Gaps between separate layers do not count.
 5. **Rate math:** `playback duration = source duration / multiplier`, and `multiplier = source duration / playback duration`. Resampling does not change either duration.
 6. **Total-time input:** make Total time a numeric field with a Seconds / Minutes / Hours / Days unit selector. The inactive rate field and its unit selector are disabled but continue to show the derived value.
-7. **Resampling:** create uniformly timed tracking positions within each layer at the selected interval, using time-based linear interpolation between cleaned points. Always keep the original first and last point, use the shortest longitude interpolation across the dateline, and never interpolate between layers. A `Path + tracking` / `Tracking only` switch chooses the geometry: the first mode uses the resampled positions for both line and marker, while the second maps the smoothed cumulative progress back onto the full cleaned-point polyline so the jagged route reveals smoothly and remains connected to the marker.
-8. **Playback drawing:** temporarily render the temporal route regardless of whether the normal layer is configured as Points or Route. Draw completed travel at normal opacity, the current position as a clearly visible marker, and future travel at either 0 or 0.30 opacity. Use each layer's current color and width.
+7. **Resampling:** create uniformly timed tracking positions within each layer at the selected interval. Always keep the original first and last point, use the shortest longitude path across the dateline, and never interpolate between layers. Edges shorter than `0.1°` remain straight, edges from `0.1°` through `1°` use tension-limited cubic Bézier smoothing, and edges longer than `1°` use great-circle interpolation. A `Path + tracking` / `Tracking only` switch chooses the source definition: the first mode uses the resampled positions for both line and marker, while the second maps the smoothed cumulative progress back onto the full cleaned-point route. Both modes use the same geometry for the revealed line and marker.
+8. **Playback drawing:** temporarily render the temporal route regardless of whether the normal layer is configured as Points or Route. Draw completed travel at normal opacity, the current position as a clearly visible marker, and future travel at either 0 or 0.30 opacity. Use each layer's current color and weight.
 9. **Dialog behavior:** the playback dialog replaces the Layer panel at the same position and width without dimming or blocking the map. Pressing Play collapses the Play panel and bottom-left map controls, hides the top-left reveal control, waits 0.5 seconds, and then starts playback while leaving the information box visible. The information box or Escape restores the Play panel, and it restores automatically two seconds after playback finishes. The top-left reveal control remains visible for ordinary Layer-panel collapsing. Closing the visible Play panel pauses playback and restores the Layer panel and normal map layers.
 10. **Information overlay:** show it while playback mode is visible, including when paused or reset. Hide it when the dialog is closed or the Show information option is off.
 11. **Time display:** show the active source date converted to the browser's local timezone as `MMMM D`, followed by elapsed source-timeline time in parentheses, for example `June 2 (33 days)`. Do not show a time or timezone label. Elapsed time means elapsed source-timeline time across the appended sequence, not wall-clock playback time.
@@ -64,7 +64,8 @@ The sequence should contain a small summary plus ordered layer segments:
     durationMs,
     distanceStartM,
     sampleCount,
-    samples // Float64Array with [lat, lon, localElapsedMs, localDistanceM] stride
+    samples, // Float64Array with [lat, lon, localElapsedMs, localDistanceM] stride
+    sampleRoute // transferable edge-kind and angular-distance typed arrays
   }]
 }
 ```
@@ -75,7 +76,7 @@ Guard against pathological sample counts. Define `MAX_PLAYBACK_SAMPLES` (start w
 
 ### `src/playback-worker.js`
 
-Run `buildPlaybackSequence()` off the UI thread. The controller sends snapshots of the ready layers plus the requested interval and a monotonically increasing preparation id. Return each segment's `Float64Array` buffer as a transferable so the generated sequence is not cloned back to the main thread. Ignore stale responses whose preparation id no longer matches, and terminate/recreate the worker when playback is invalidated.
+Run `buildPlaybackSequence()` off the UI thread. The controller sends snapshots of the ready layers plus the requested interval and a monotonically increasing preparation id. Return each segment's sample buffers and compact route-metadata buffers as transferables so the generated sequence is not cloned back to the main thread. Ignore stale responses whose preparation id no longer matches, and terminate/recreate the worker when playback is invalidated.
 
 ### `src/playback-controller.js`
 
@@ -166,6 +167,7 @@ Acceptance:
 - Add `TimelineMap`'s overlay-only render method and avoid canvas resizing on every animation frame.
 - Swap normal canvas layers for playback layers while the dialog is active; restore normal layers when it closes.
 - Add the current-position marker, completed path, and 0/0.30 future preview.
+- Use the shared straight/Bézier/great-circle primitives for normal routes, playback routes, partial reveals, markers, and camera bounds.
 - Track dateline-aware revealed-path bounds incrementally and optionally animate the map camera toward a margin-aware target view.
 
 Acceptance:
@@ -217,7 +219,7 @@ Acceptance:
 ### Phase 5: Lifecycle, documentation, and full verification
 
 - On upload completion, add/delete/clear/reprocess, or a data-affecting layer setting change, pause and invalidate playback so it cannot hold stale arrays.
-- Color and width changes may update the playback renderer in place; speed-unit changes only reformat distance.
+- Color and weight changes may update the playback renderer in place; speed-unit changes only reformat distance.
 - Terminate preparation work and cancel animation frames when playback is invalidated.
 - Update the Instructions dialog and README with Play behavior, append ordering, local time display, resampling limits, and the privacy-safe local region lookup.
 - Run `npm test` and `npm run build`.

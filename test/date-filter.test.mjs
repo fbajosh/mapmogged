@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ceilDateTimeToMinute,
+  filterPointsByDate,
+  floorDateTimeToMinute,
   formatDateTimeLocal,
   getDateFilterReason,
   isValidDateInterval,
@@ -22,6 +25,13 @@ test("keeps range endpoints and excludes blackout endpoints", () => {
   assert.equal(getDateFilterReason(900, options), "");
   assert.equal(getDateFilterReason(901, options), "range");
   assert.equal(getDateFilterReason(500, { dateRangeStartMs: null, dateRangeEndMs: null }), "");
+  assert.deepEqual(
+    filterPointsByDate(
+      [[0, 0, 99], [0, 0, 100], [0, 0, 500], [0, 0, 900], [0, 0, 901]],
+      options,
+    ).map((point) => point[2]),
+    [100, 900],
+  );
 });
 
 test("validates ordered intervals inside available bounds", () => {
@@ -32,9 +42,17 @@ test("validates ordered intervals inside available bounds", () => {
   assert.equal(isValidDateInterval(null, null, 0, 300), false);
 });
 
-test("round trips local datetime input values", () => {
+test("formats local datetime inputs at minute precision", () => {
   const timeMs = new Date(2026, 6, 19, 14, 5, 6, 123).getTime();
-  assert.equal(parseDateTimeLocal(formatDateTimeLocal(timeMs)), timeMs);
+  assert.equal(formatDateTimeLocal(timeMs), "2026-07-19T14:05");
+  assert.equal(parseDateTimeLocal(formatDateTimeLocal(timeMs)), new Date(2026, 6, 19, 14, 5).getTime());
+});
+
+test("rounds available bounds outward to whole minutes", () => {
+  const exactMinute = new Date(2026, 6, 19, 14, 5).getTime();
+  assert.equal(floorDateTimeToMinute(exactMinute + 59_999), exactMinute);
+  assert.equal(ceilDateTimeToMinute(exactMinute), exactMinute);
+  assert.equal(ceilDateTimeToMinute(exactMinute + 1), exactMinute + 60_000);
 });
 
 test("prefers raw bounds and falls back to cleaned timestamps", () => {

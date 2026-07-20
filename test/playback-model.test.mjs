@@ -14,6 +14,7 @@ import {
   getPreferredDurationUnit,
   samplePlaybackAt,
 } from "../src/playback-model.js";
+import { createRouteEdge, interpolateRouteEdge } from "../src/route-geometry.js";
 
 test("derives playback duration and multiplier", () => {
   const oneDay = 86_400_000;
@@ -40,7 +41,7 @@ test("builds layers sequentially without cross-layer distance", () => {
   assert.equal(samplePlaybackAt(sequence, 1000).layerId, 2);
 });
 
-test("resamples endpoints and interpolates at playback time", () => {
+test("resamples endpoints and tracks the great-circle path at playback time", () => {
   const sequence = buildPlaybackSequence([makeLayer(1, [[0, 0, 0], [10, 10, 1000]])], 400);
   const segment = sequence.segments[0];
   assert.equal(segment.sampleCount, 4);
@@ -48,8 +49,10 @@ test("resamples endpoints and interpolates at playback time", () => {
   assert.equal(segment.samples[(segment.sampleCount - 1) * 4 + 2], 1000);
 
   const sample = samplePlaybackAt(sequence, 500);
-  assert.ok(Math.abs(sample.lat - 5) < 0.001);
-  assert.ok(Math.abs(sample.lon - 5) < 0.001);
+  const expected = interpolateRouteEdge(createRouteEdge(null, [0, 0], [10, 10], null), 0.5);
+  assert.ok(Math.abs(sample.lat - expected.lat) < 0.001);
+  assert.ok(Math.abs(sample.lon - expected.lon) < 0.001);
+  assert.ok(sample.lat > 5);
 });
 
 test("preserves original path geometry separately from tracking samples", () => {
@@ -73,8 +76,10 @@ test("projects smoothed tracking progress onto the full source path", () => {
   const fullPath = samplePlaybackAt(sequence, 400, { pathMode: "tracking-only" });
   assert.ok(Math.abs(simplified.lat - 0.4) < 0.001);
   assert.ok(Math.abs(simplified.lon - 0.4) < 0.001);
-  assert.ok(Math.abs(fullPath.lat) < 0.001);
-  assert.ok(Math.abs(fullPath.lon - 0.8) < 0.002);
+  const sourceEdge = createRouteEdge(null, [0, 0], [0, 1], [1, 1]);
+  const expected = interpolateRouteEdge(sourceEdge, 0.8);
+  assert.ok(Math.abs(fullPath.lat - expected.lat) < 0.001);
+  assert.ok(Math.abs(fullPath.lon - expected.lon) < 0.002);
   assert.equal(fullPath.localDistanceM, simplified.localDistanceM);
 });
 

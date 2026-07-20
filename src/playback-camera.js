@@ -1,4 +1,8 @@
 import { SAMPLE_STRIDE, samplePathAtDistance } from "./playback-model.js";
+import {
+  createRouteEdge,
+  getRouteEdgeBoundsPoints,
+} from "./route-geometry.js";
 
 const MERCATOR_MAX_LATITUDE = 85.05112878;
 const EPSILON = 1e-9;
@@ -26,31 +30,53 @@ class RevealedPathBounds {
     for (let segmentIndex = 0; segmentIndex < snapshot.segmentIndex; segmentIndex += 1) {
       const segment = sequence.segments[segmentIndex];
       const path = getSegmentPath(segment, pathMode);
-      this.addSegmentThrough(path.samples, path.sampleCount, segmentIndex, path.sampleCount - 1);
+      this.addSegmentThrough(path, segmentIndex, path.sampleCount - 1);
     }
 
     const active = sequence.segments[snapshot.segmentIndex];
     const activePath = getSegmentPath(active, pathMode);
     if (pathMode === "tracking-only") {
-      const timed = samplePathAtDistance(activePath.samples, activePath.sampleCount, snapshot.localDistanceM);
-      this.addSegmentThrough(activePath.samples, activePath.sampleCount, snapshot.segmentIndex, timed.startIndex);
-      if (timed.ratio > 0) this.addPoint(timed.lat, timed.lon);
+      const timed = samplePathAtDistance(
+        activePath.samples,
+        activePath.sampleCount,
+        snapshot.localDistanceM,
+        activePath.route,
+      );
+      this.addSegmentThrough(activePath, snapshot.segmentIndex, timed.startIndex);
+      if (timed.ratio > 0) this.addPartialEdge(activePath, timed.startIndex, timed.ratio);
     } else {
-      this.addSegmentThrough(activePath.samples, activePath.sampleCount, snapshot.segmentIndex, snapshot.sampleIndex);
-      this.addPoint(snapshot.lat, snapshot.lon);
+      this.addSegmentThrough(activePath, snapshot.segmentIndex, snapshot.sampleIndex);
+      if (snapshot.sampleRatio > 0) {
+        this.addPartialEdge(activePath, snapshot.sampleIndex, snapshot.sampleRatio);
+      }
     }
     this.lastElapsedMs = snapshot.sourceElapsedMs;
     return this.getBounds();
   }
 
-  addSegmentThrough(samples, sampleCount, segmentIndex, endIndex) {
+  addSegmentThrough(path, segmentIndex, endIndex) {
     const lastProcessed = this.processedSamples[segmentIndex] ?? -1;
-    const normalizedEnd = Math.min(Math.max(-1, endIndex), sampleCount - 1);
-    for (let index = lastProcessed + 1; index <= normalizedEnd; index += 1) {
-      const offset = index * SAMPLE_STRIDE;
-      this.addPoint(samples[offset], samples[offset + 1]);
+    const normalizedEnd = Math.min(Math.max(-1, endIndex), path.sampleCount - 1);
+    if (lastProcessed < 0 && normalizedEnd >= 0) {
+      const first = getPackedPoint(path.samples, 0);
+      this.addPoint(first.lat, first.lon);
+    }
+    for (let index = Math.max(1, lastProcessed + 1); index <= normalizedEnd; index += 1) {
+      this.addEdge(path, index - 1, 1);
     }
     this.processedSamples[segmentIndex] = Math.max(lastProcessed, normalizedEnd);
+  }
+
+  addPartialEdge(path, edgeIndex, ratio) {
+    if (edgeIndex < 0 || edgeIndex >= path.sampleCount - 1) return;
+    this.addEdge(path, edgeIndex, ratio);
+  }
+
+  addEdge(path, edgeIndex, ratio) {
+    const edge = getPackedRouteEdge(path, edgeIndex);
+    for (const point of getRouteEdgeBoundsPoints(edge, ratio)) {
+      this.addPoint(point.lat, point.lon);
+    }
   }
 
   addPoint(lat, lon) {
@@ -104,9 +130,36 @@ class RevealedPathBounds {
 
 function getSegmentPath(segment, pathMode) {
   if (pathMode === "tracking-only") {
-    return { samples: segment.sourceSamples, sampleCount: segment.sourceSampleCount };
+    return {
+      samples: segment.sourceSamples,
+      sampleCount: segment.sourceSampleCount,
+      route: segment.sourceRoute,
+    };
   }
-  return { samples: segment.samples, sampleCount: segment.sampleCount };
+  return { samples: segment.samples, sampleCount: segment.sampleCount, route: segment.sampleRoute };
+}
+
+function getPackedRouteEdge(path, edgeIndex) {
+  return createRouteEdge(
+    edgeIndex > 0 ? getPackedPoint(path.samples, edgeIndex - 1) : null,
+    getPackedPoint(path.samples, edgeIndex),
+    getPackedPoint(path.samples, edgeIndex + 1),
+    edgeIndex + 2 < path.sampleCount ? getPackedPoint(path.samples, edgeIndex + 2) : null,
+    getRouteEdgeOptions(path.route, edgeIndex),
+  );
+}
+
+function getPackedPoint(samples, index) {
+  const offset = index * SAMPLE_STRIDE;
+  return { lat: samples[offset], lon: samples[offset + 1] };
+}
+
+function getRouteEdgeOptions(route, edgeIndex) {
+  if (!route?.edgeKinds || !route?.edgeAngles) return {};
+  return {
+    kind: route.edgeKinds[edgeIndex],
+    angleDegrees: route.edgeAngles[edgeIndex],
+  };
 }
 
 function getFitCameraTarget(bounds, options) {

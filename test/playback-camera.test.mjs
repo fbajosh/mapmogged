@@ -40,6 +40,19 @@ test("fits full source geometry when only tracking is resampled", () => {
   assert.equal(sourceBounds.maxLat, 10);
 });
 
+test("includes great-circle bulges and Bezier controls in revealed bounds", () => {
+  const greatCircle = makeSequence([[60, -60, 0], [60, 60, 1000]], 1000);
+  const greatCircleBounds = new RevealedPathBounds().update(
+    greatCircle,
+    samplePlaybackAt(greatCircle, 1000),
+  );
+  assert.ok(greatCircleBounds.maxLat > 70);
+
+  const curved = makeSequence([[0, 0, 0], [0, 0.5, 500], [0.5, 1, 1000]], 500);
+  const curvedBounds = new RevealedPathBounds().update(curved, samplePlaybackAt(curved, 1000));
+  assert.ok(curvedBounds.minLat < 0);
+});
+
 test("uses starting zoom for a point and zooms out for a growing path and margin", () => {
   const point = { minLat: 1, maxLat: 1, minLon: 2, maxLon: 2 };
   const baseOptions = {

@@ -1,4 +1,6 @@
 import { SAMPLE_STRIDE, samplePathAtDistance } from "./playback-model.js";
+import { createRouteEdge } from "./route-geometry.js";
+import { drawRouteEdgeFlat, drawRouteEdgeGlobe } from "./route-canvas.js";
 
 const MAX_DRAWN_SAMPLES_PER_PASS = 50_000;
 
@@ -28,19 +30,19 @@ class PlaybackCanvasLayer {
     if (this.previewAlpha > 0) {
       for (const segment of this.sequence.segments) {
         const path = getSegmentPath(segment, this.pathMode);
-        drawFlatSegment(ctx, map, segment, path.samples, path.sampleCount - 1, this.previewAlpha);
+        drawFlatSegment(ctx, map, segment, path, path.sampleCount - 1, this.previewAlpha);
       }
     }
 
     for (let index = 0; index < this.snapshot.segmentIndex; index += 1) {
       const segment = this.sequence.segments[index];
       const path = getSegmentPath(segment, this.pathMode);
-      drawFlatSegment(ctx, map, segment, path.samples, path.sampleCount - 1, 0.9);
+      drawFlatSegment(ctx, map, segment, path, path.sampleCount - 1, 0.9);
     }
 
     const active = this.sequence.segments[this.snapshot.segmentIndex];
     const revealed = getRevealedPath(active, this.snapshot, this.pathMode);
-    drawFlatSegment(ctx, map, active, revealed.samples, revealed.endIndex, 0.9, revealed.head);
+    drawFlatSegment(ctx, map, active, revealed, revealed.endIndex, 0.9, revealed.edgeRatio);
     drawFlatMarker(ctx, map, active, this.snapshot);
     ctx.globalAlpha = 1;
   }
@@ -50,95 +52,88 @@ class PlaybackCanvasLayer {
     if (this.previewAlpha > 0) {
       for (const segment of this.sequence.segments) {
         const path = getSegmentPath(segment, this.pathMode);
-        drawGlobeSegment(ctx, map, geometry, segment, path.samples, path.sampleCount - 1, this.previewAlpha);
+        drawGlobeSegment(ctx, map, geometry, segment, path, path.sampleCount - 1, this.previewAlpha);
       }
     }
 
     for (let index = 0; index < this.snapshot.segmentIndex; index += 1) {
       const segment = this.sequence.segments[index];
       const path = getSegmentPath(segment, this.pathMode);
-      drawGlobeSegment(ctx, map, geometry, segment, path.samples, path.sampleCount - 1, 0.9);
+      drawGlobeSegment(ctx, map, geometry, segment, path, path.sampleCount - 1, 0.9);
     }
 
     const active = this.sequence.segments[this.snapshot.segmentIndex];
     const revealed = getRevealedPath(active, this.snapshot, this.pathMode);
-    drawGlobeSegment(ctx, map, geometry, active, revealed.samples, revealed.endIndex, 0.9, revealed.head);
+    drawGlobeSegment(ctx, map, geometry, active, revealed, revealed.endIndex, 0.9, revealed.edgeRatio);
     drawGlobeMarker(ctx, map, geometry, active, this.snapshot);
     ctx.globalAlpha = 1;
   }
 }
 
-function drawFlatSegment(ctx, map, segment, samples, endIndex, alpha, head = null) {
-  if (endIndex < 1 && !head?.sampleRatio) return;
+function drawFlatSegment(ctx, map, segment, path, endIndex, alpha, edgeRatio = 0) {
+  if (endIndex < 1 && edgeRatio <= 0) return;
   setupRouteContext(ctx, segment, alpha);
   const step = getDrawStep(endIndex + 1);
-  let previous = getSample(samples, 0);
-  let drawing = false;
   ctx.beginPath();
-
-  for (let index = step; index <= endIndex; index += step) {
-    const current = getSample(samples, Math.min(index, endIndex));
-    drawing = addFlatEdge(ctx, map, previous, current) || drawing;
-    previous = current;
-  }
-
-  if (endIndex > 0 && (endIndex % step !== 0 || previous.index !== endIndex)) {
-    const current = getSample(samples, endIndex);
-    drawing = addFlatEdge(ctx, map, previous, current) || drawing;
-    previous = current;
-  }
-
-  if (head?.sampleRatio > 0) {
-    drawing = addFlatEdge(ctx, map, previous, head) || drawing;
+  let drawing = drawCompleteEdges(
+    path,
+    endIndex,
+    step,
+    (edge) => drawRouteEdgeFlat(ctx, map, edge, 1, 24),
+  );
+  if (edgeRatio > 0 && endIndex < path.sampleCount - 1) {
+    const edge = getPackedRouteEdge(path, endIndex);
+    drawing = drawRouteEdgeFlat(ctx, map, edge, edgeRatio, 24) || drawing;
   }
   if (drawing) ctx.stroke();
 }
 
-function drawGlobeSegment(ctx, map, geometry, segment, samples, endIndex, alpha, head = null) {
-  if (endIndex < 1 && !head?.sampleRatio) return;
+function drawGlobeSegment(ctx, map, geometry, segment, path, endIndex, alpha, edgeRatio = 0) {
+  if (endIndex < 1 && edgeRatio <= 0) return;
   setupRouteContext(ctx, segment, alpha);
   const step = getDrawStep(endIndex + 1);
-  let previous = projectGlobe(map, geometry, getSample(samples, 0));
-  let drawing = false;
   ctx.beginPath();
-
-  for (let index = step; index <= endIndex; index += step) {
-    const current = projectGlobe(map, geometry, getSample(samples, Math.min(index, endIndex)));
-    if (previous.visible && current.visible) {
-      ctx.moveTo(previous.x, previous.y);
-      ctx.lineTo(current.x, current.y);
-      drawing = true;
-    }
-    previous = current;
-  }
-
-  if (endIndex > 0 && endIndex % step !== 0) {
-    const current = projectGlobe(map, geometry, getSample(samples, endIndex));
-    if (previous.visible && current.visible) {
-      ctx.moveTo(previous.x, previous.y);
-      ctx.lineTo(current.x, current.y);
-      drawing = true;
-    }
-    previous = current;
-  }
-
-  if (head?.sampleRatio > 0) {
-    const current = projectGlobe(map, geometry, head);
-    if (previous.visible && current.visible) {
-      ctx.moveTo(previous.x, previous.y);
-      ctx.lineTo(current.x, current.y);
-      drawing = true;
-    }
+  let drawing = drawCompleteEdges(
+    path,
+    endIndex,
+    step,
+    (edge) => drawRouteEdgeGlobe(ctx, map, geometry, edge, 1, Number(segment.width) + 4),
+  );
+  if (edgeRatio > 0 && endIndex < path.sampleCount - 1) {
+    const edge = getPackedRouteEdge(path, endIndex);
+    drawing = drawRouteEdgeGlobe(
+      ctx,
+      map,
+      geometry,
+      edge,
+      edgeRatio,
+      Number(segment.width) + 4,
+    ) || drawing;
   }
   if (drawing) ctx.stroke();
 }
 
-function addFlatEdge(ctx, map, start, end) {
-  const segment = map.segmentIntersectsView([start.lat, start.lon], [end.lat, end.lon], 24);
-  if (!segment.visible) return false;
-  ctx.moveTo(segment.start.x, segment.start.y);
-  ctx.lineTo(segment.end.x, segment.end.y);
-  return true;
+function drawCompleteEdges(path, endIndex, step, drawEdge) {
+  let drawing = false;
+  let previousIndex = null;
+  let startIndex = 0;
+  while (startIndex < endIndex) {
+    const nextIndex = Math.min(endIndex, startIndex + step);
+    const afterIndex = nextIndex < path.sampleCount - 1
+      ? Math.min(path.sampleCount - 1, nextIndex + step)
+      : null;
+    const edge = createRouteEdge(
+      previousIndex === null ? null : getSample(path.samples, previousIndex),
+      getSample(path.samples, startIndex),
+      getSample(path.samples, nextIndex),
+      afterIndex === null ? null : getSample(path.samples, afterIndex),
+      nextIndex === startIndex + 1 ? getRouteEdgeOptions(path.route, startIndex) : {},
+    );
+    drawing = drawEdge(edge) || drawing;
+    previousIndex = startIndex;
+    startIndex = nextIndex;
+  }
+  return drawing;
 }
 
 function drawFlatMarker(ctx, map, segment, snapshot) {
@@ -173,27 +168,50 @@ function setupRouteContext(ctx, segment, alpha) {
   ctx.globalAlpha = alpha;
 }
 
-function projectGlobe(map, geometry, point) {
-  return map.latLonToGlobePoint(point.lat, point.lon, geometry);
-}
-
 function getSegmentPath(segment, pathMode) {
   if (pathMode === "tracking-only") {
-    return { samples: segment.sourceSamples, sampleCount: segment.sourceSampleCount };
+    return {
+      samples: segment.sourceSamples,
+      sampleCount: segment.sourceSampleCount,
+      route: segment.sourceRoute,
+    };
   }
-  return { samples: segment.samples, sampleCount: segment.sampleCount };
+  return { samples: segment.samples, sampleCount: segment.sampleCount, route: segment.sampleRoute };
 }
 
 function getRevealedPath(segment, snapshot, pathMode) {
   const path = getSegmentPath(segment, pathMode);
   if (pathMode !== "tracking-only") {
-    return { ...path, endIndex: snapshot.sampleIndex, head: snapshot };
+    return { ...path, endIndex: snapshot.sampleIndex, edgeRatio: snapshot.sampleRatio };
   }
-  const timed = samplePathAtDistance(path.samples, path.sampleCount, snapshot.localDistanceM);
+  const timed = samplePathAtDistance(
+    path.samples,
+    path.sampleCount,
+    snapshot.localDistanceM,
+    path.route,
+  );
   return {
     ...path,
     endIndex: timed.startIndex,
-    head: timed.ratio > 0 ? { ...timed, sampleRatio: timed.ratio } : null,
+    edgeRatio: timed.ratio,
+  };
+}
+
+function getPackedRouteEdge(path, edgeIndex) {
+  return createRouteEdge(
+    edgeIndex > 0 ? getSample(path.samples, edgeIndex - 1) : null,
+    getSample(path.samples, edgeIndex),
+    getSample(path.samples, edgeIndex + 1),
+    edgeIndex + 2 < path.sampleCount ? getSample(path.samples, edgeIndex + 2) : null,
+    getRouteEdgeOptions(path.route, edgeIndex),
+  );
+}
+
+function getRouteEdgeOptions(route, edgeIndex) {
+  if (!route?.edgeKinds || !route?.edgeAngles) return {};
+  return {
+    kind: route.edgeKinds[edgeIndex],
+    angleDegrees: route.edgeAngles[edgeIndex],
   };
 }
 
