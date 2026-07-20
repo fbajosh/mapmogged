@@ -452,7 +452,7 @@ h1 {
   display: none;
 }
 
-.playback-transparency-control {
+.playback-opacity-control {
   display: grid;
   gap: 5px;
   color: var(--muted);
@@ -461,14 +461,14 @@ h1 {
   text-transform: uppercase;
 }
 
-.playback-transparency-control > div {
+.playback-opacity-control > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 36px;
   align-items: center;
   gap: 8px;
 }
 
-.playback-transparency-control input {
+.playback-opacity-control input {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -477,7 +477,7 @@ h1 {
   accent-color: var(--accent);
 }
 
-.playback-transparency-control output {
+.playback-opacity-control output {
   color: var(--ink);
   font-size: 11px;
   font-weight: 600;

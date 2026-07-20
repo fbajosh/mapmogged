@@ -2,6 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PlaybackFeature } from "../src/playback-feature.js";
 
+test("treats the custom preview percentage as opacity", () => {
+  const feature = Object.assign(Object.create(PlaybackFeature.prototype), {
+    customPreviewColor: "#2563eb",
+    elements: {
+      previewInputs: [{ checked: true, value: "custom" }],
+      previewOpacity: { value: "30" },
+    },
+  });
+
+  assert.deepEqual(feature.getPreviewStyle(), { alpha: 0.3, color: "#2563eb" });
+  feature.elements.previewOpacity.value = "100";
+  assert.deepEqual(feature.getPreviewStyle(), { alpha: 1, color: "#2563eb" });
+  feature.elements.previewOpacity.value = "0";
+  assert.deepEqual(feature.getPreviewStyle(), { alpha: 0, color: "#2563eb" });
+});
+
 test("collapses and restores playback controls without closing playback mode", () => {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;

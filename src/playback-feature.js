@@ -140,7 +140,7 @@ class PlaybackFeature {
         this.applyPreviewStyle();
       });
     }
-    this.elements.previewTransparency.addEventListener("input", () => {
+    this.elements.previewOpacity.addEventListener("input", () => {
       this.syncPreviewControls();
       this.applyPreviewStyle();
     });
@@ -588,8 +588,8 @@ class PlaybackFeature {
   getPreviewStyle() {
     const mode = this.elements.previewInputs.find((input) => input.checked)?.value ?? "0.3";
     if (mode === "custom") {
-      const transparency = clamp(Number(this.elements.previewTransparency.value) || 0, 0, 100);
-      return { alpha: 1 - transparency / 100, color: this.customPreviewColor };
+      const opacity = clamp(Number(this.elements.previewOpacity.value) || 0, 0, 100);
+      return { alpha: opacity / 100, color: this.customPreviewColor };
     }
     return { alpha: Number(mode), color: null };
   }
@@ -597,8 +597,8 @@ class PlaybackFeature {
   syncPreviewControls() {
     const isCustom = this.elements.previewInputs.find((input) => input.checked)?.value === "custom";
     this.elements.previewCustom.hidden = !isCustom;
-    const transparency = clamp(Number(this.elements.previewTransparency.value) || 0, 0, 100);
-    this.elements.previewTransparencyValue.value = `${Math.round(transparency)}%`;
+    const opacity = clamp(Number(this.elements.previewOpacity.value) || 0, 0, 100);
+    this.elements.previewOpacityValue.value = `${Math.round(opacity)}%`;
   }
 
   applyPreviewStyle() {
@@ -765,8 +765,8 @@ function getElements() {
     previewInputs: Array.from(document.querySelectorAll('input[name="playbackPreview"]')),
     previewCustom: document.querySelector("#playbackPreviewCustom"),
     previewCustomColor: document.querySelector("#playbackPreviewCustomColor"),
-    previewTransparency: document.querySelector("#playbackPreviewTransparency"),
-    previewTransparencyValue: document.querySelector("#playbackPreviewTransparencyValue"),
+    previewOpacity: document.querySelector("#playbackPreviewOpacity"),
+    previewOpacityValue: document.querySelector("#playbackPreviewOpacityValue"),
     nodeInputs: Array.from(document.querySelectorAll('input[name="playbackNode"]')),
     nodeSize: document.querySelector("#playbackNodeSize"),
     autoFitInputs: Array.from(document.querySelectorAll('input[name="playbackAutoFit"]')),
