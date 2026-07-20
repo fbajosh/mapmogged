@@ -979,6 +979,124 @@ body.is-panel-collapsed .map-controls {
   grid-column: span 6;
 }
 
+.layer-settings {
+  margin-top: 8px;
+}
+
+.layer-settings-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px 6px 0 0;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.layer-card .layer-settings-tab {
+  width: 100%;
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 3px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.layer-card .layer-settings-tab:last-child {
+  border-right: 0;
+}
+
+.layer-card .layer-settings-tab[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--accent-strong);
+}
+
+.layer-settings-panel {
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 9px;
+}
+
+.layer-settings-grid {
+  margin-top: 0;
+}
+
+.layer-settings-message {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.date-time-control {
+  display: block;
+  min-width: 0;
+}
+
+.date-time-control > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.date-time-control input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  padding: 8px 6px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.date-exclusion-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.layer-card .date-exclusion-add {
+  display: inline-flex;
+  width: auto;
+  height: 28px;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 7px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.date-exclusion-add svg {
+  flex: 0 0 auto;
+}
+
+.date-exclusion-list {
+  display: grid;
+  gap: 9px;
+}
+
+.date-exclusion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px;
+  align-items: end;
+  gap: 7px;
+}
+
+.layer-card .date-exclusion-remove {
+  margin-bottom: 4px;
+}
+
 @media (max-width: 760px) {
   body {
     overflow: auto;
@@ -1025,5 +1143,25 @@ body.is-panel-collapsed .map-controls {
     right: 10px;
     width: min(25ch, calc(100vw - 76px));
     font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .layer-date-range-controls > .layer-span-6 {
+    grid-column: 1 / -1;
+  }
+
+  .date-exclusion-row {
+    grid-template-columns: minmax(0, 1fr) 24px;
+  }
+
+  .date-exclusion-row > .date-time-control {
+    grid-column: 1;
+  }
+
+  .date-exclusion-row > .date-exclusion-remove {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
   }
 }

@@ -21,7 +21,7 @@ These decisions make the idea concrete enough to implement without stopping for 
 9. **Dialog behavior:** the playback dialog replaces the Layer panel at the same position and width without dimming or blocking the map. Pressing Play collapses the Play panel and bottom-left map controls, hides the top-left reveal control, waits 0.5 seconds, and then starts playback while leaving the information box visible. The information box or Escape restores the Play panel, and it restores automatically two seconds after playback finishes. The top-left reveal control remains visible for ordinary Layer-panel collapsing. Closing the visible Play panel pauses playback and restores the Layer panel and normal map layers.
 10. **Information overlay:** show it while playback mode is visible, including when paused or reset. Hide it when the dialog is closed or the Show information option is off.
 11. **Time display:** show the active source date converted to the browser's local timezone as `MMMM D`, followed by elapsed source-timeline time in parentheses, for example `June 2 (33 days)`. Do not show a time or timezone label. Elapsed time means elapsed source-timeline time across the appended sequence, not wall-clock playback time.
-12. **Elapsed units:** interpret the repeated "minutes" in the idea as a typo. Use minutes below 60 minutes, hours below 24 hours, days below 365 days, and years at or above 365 days. Display the elapsed value as a whole number.
+12. **Elapsed units:** interpret the repeated "minutes" in the idea as a typo. Use minutes below 60 minutes, hours through 36 hours, days after 36 hours and below 365 days, and years at or above 365 days. Display the elapsed value as a whole number. The 36-hour boundary ensures the first displayed day value is plural.
 13. **Region row:** search every feature in the configured local GeoJSON set. When the current point matches a feature, show `[region name], [country name]`; when it matches none, hide the entire row. Do not hard-code a Spain/France/Portugal allowlist in lookup or display logic.
 14. **Reset semantics:** Reset returns to the first point and keeps the current settings. Play from the finished state resets to the first point and starts again.
 15. **Auto-fit camera:** an On / Off switch optionally fits the camera to all revealed positions. Starting zoom level is the maximum zoom used while the revealed path has no extent, Path margin is a pixel inset from each screen edge once the path grows, and Smoothing time is an exponential camera time constant in seconds. While playing, use the smoothing time as a wall-clock look-ahead horizon, converted to source time by the playback multiplier, so the target view anticipates camera lag without revealing the future route. A zero smoothing value applies the current target view immediately.
@@ -156,7 +156,7 @@ Acceptance:
 - Switching to Total time and entering `30 seconds` derives `2880x`.
 - Two overlapping layers play layer 1 then layer 2, and total distance excludes the jump between them.
 - Resampling retains both endpoints and never creates a layer-to-layer segment.
-- Elapsed formatting switches units exactly at 60 minutes, 24 hours, and 365 days.
+- Elapsed formatting switches to hours at 60 minutes, to days after 36 hours, and to years at 365 days.
 
 ### Phase 2: Playback clock and canvas rendering
 
@@ -197,16 +197,16 @@ Acceptance:
 - Update numeric/date information at a throttled rate (for example 10 Hz) while keeping the canvas marker at animation-frame speed.
 - Run regional point-in-polygon lookup on its separate one-second wall-clock throttle, retaining the previous region label between checks.
 - Show:
-  - `[distance covered] / [distance total] [distance unit]`
   - `[local datetime] / [elapsed value] [elapsed unit]`
-  - `[region], [country]` only when the point matches any feature in the configured local GeoJSON set
-  - `[elapsed real playback time] / [total real playback time] ([playback multiplier to two significant figures]x)` as the final row
+  - `[distance covered] / [distance total] [distance unit]`
+  - `[elapsed real playback time] / [total real playback time] ([playback multiplier to two significant figures]x)`
+  - `[region], [country]` as the final row, only when the point matches any feature in the configured local GeoJSON set
 - Add the manifest, generic GeoJSON loader/normalizer, lookup code, tests, notices, and attribution. Update the static build to include `gadm`.
 - Cache region results so a polygon search is not repeated on every frame.
 
 Acceptance:
 
-- mph displays mi, km/h displays km, m/s displays m, and knots displays NM; all distance values use zero decimal places, and changing the existing speed-unit menu updates the overlay without resetting playback.
+- mph displays miles, km/h displays km, m/s displays meters, and knots displays NM; all distance values use zero decimal places, and changing the existing speed-unit menu updates the overlay without resetting playback.
 - Known fixture coordinates resolve to a Spanish province, French department, and Portuguese district/region.
 - A point outside every loaded feature or a lookup failure counts as a miss; the region row clears on the third consecutive miss.
 - Adding a fourth GADM-style GeoJSON plus a manifest entry works without a code change.

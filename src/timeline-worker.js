@@ -1,3 +1,5 @@
+import { getDateFilterReason } from "./date-filter.js";
+
 const KEY = '"timelinePath"';
 const EARTH_RADIUS_M = 6371e3;
 const PROGRESS_INTERVAL_MS = 250;
@@ -68,8 +70,9 @@ async function parseJsonFile(file, options) {
 
   stats.outOfOrderCount = countOutOfOrder(rawPoints);
   rawPoints.sort((a, b) => a.timeMs - b.timeMs);
+  setTimeBounds(stats, rawPoints);
   for (const point of rawPoints) {
-    maybeKeepPoint(point, cleanState, cleanedPoints, stats, options);
+    maybeKeepFilteredPoint(point, cleanState, cleanedPoints, stats, options);
   }
 
   return {
@@ -114,8 +117,9 @@ async function parseCsvFile(file, options) {
 
   stats.outOfOrderCount = countOutOfOrder(rawPoints);
   rawPoints.sort((a, b) => a.timeMs - b.timeMs);
+  setTimeBounds(stats, rawPoints);
   for (const point of rawPoints) {
-    maybeKeepPoint(point, cleanState, cleanedPoints, stats, options);
+    maybeKeepFilteredPoint(point, cleanState, cleanedPoints, stats, options);
   }
 
   return {
@@ -415,6 +419,19 @@ function createCleanState() {
   };
 }
 
+function maybeKeepFilteredPoint(point, state, cleanedPoints, stats, options = {}) {
+  const reason = getDateFilterReason(point?.timeMs, options);
+  if (reason === "range") {
+    stats.skippedDateRange += 1;
+    return state;
+  }
+  if (reason === "exclusion") {
+    stats.skippedDateExclusion += 1;
+    return state;
+  }
+  return maybeKeepPoint(point, state, cleanedPoints, stats, options);
+}
+
 function maybeKeepPoint(point, state, cleanedPoints, stats, options) {
   if (!state.previousRaw || !state.previousKept) {
     const first = [point.lat, point.lon, point.timeMs, 0, 0, getUtcYear(point.timeMs)];
@@ -490,6 +507,11 @@ function countOutOfOrder(points) {
   return count;
 }
 
+function setTimeBounds(stats, sortedPoints) {
+  stats.minTimeMs = sortedPoints.length ? sortedPoints[0].timeMs : null;
+  stats.maxTimeMs = sortedPoints.length ? sortedPoints.at(-1).timeMs : null;
+}
+
 function findLineEnd(text) {
   const newline = text.indexOf("\n");
   const carriage = text.indexOf("\r");
@@ -510,8 +532,12 @@ function createStats(fileSize) {
     rawCount: 0,
     skippedSlow: 0,
     skippedFast: 0,
+    skippedDateRange: 0,
+    skippedDateExclusion: 0,
     skippedInvalid: 0,
     outOfOrderCount: 0,
+    minTimeMs: null,
+    maxTimeMs: null,
   };
 }
 
@@ -520,12 +546,17 @@ function summarizeStats(stats) {
     rawCount: stats.rawCount,
     skippedSlow: stats.skippedSlow,
     skippedFast: stats.skippedFast,
+    skippedDateRange: stats.skippedDateRange,
+    skippedDateExclusion: stats.skippedDateExclusion,
     skippedInvalid: stats.skippedInvalid,
     outOfOrderCount: stats.outOfOrderCount,
+    minTimeMs: stats.minTimeMs,
+    maxTimeMs: stats.maxTimeMs,
   };
 }
 
 function postProgress(stats, keptCount) {
+  if (typeof self === "undefined" || typeof self.postMessage !== "function") return;
   self.postMessage({
     type: "progress",
     percent: stats.fileSize ? (stats.bytesRead / stats.fileSize) * 100 : 0,
@@ -539,7 +570,11 @@ export {
   createCleanState,
   normalizePathPoint,
   normalizeCsvRow,
+  parseCsvFile,
   parseCsvLine,
+  parseJsonFile,
+  maybeKeepFilteredPoint,
   maybeKeepPoint,
+  setTimeBounds,
   haversineMeters,
 };

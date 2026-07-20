@@ -10,9 +10,9 @@ const DURATION_UNIT_MS = {
 };
 
 const DISTANCE_UNITS = {
-  mph: { label: "mi", metersPerUnit: 1609.344 },
+  mph: { label: "miles", metersPerUnit: 1609.344 },
   kmh: { label: "km", metersPerUnit: 1000 },
-  mps: { label: "m", metersPerUnit: 1 },
+  mps: { label: "meters", metersPerUnit: 1 },
   knots: { label: "NM", metersPerUnit: 1852 },
 };
 
@@ -375,7 +375,7 @@ function formatElapsed(elapsedMs) {
   if (minutes < 60) {
     value = minutes;
     unit = "minutes";
-  } else if (minutes < 24 * 60) {
+  } else if (minutes <= 36 * 60) {
     value = minutes / 60;
     unit = "hours";
   } else if (minutes < 365 * 24 * 60) {

@@ -32,9 +32,11 @@ Parsing runs in a Web Worker so the main page can keep updating progress and map
 
 Large-file note: the app avoids loading the full JSON text into one giant object, but it still keeps normalized points in browser memory so it can sort and render them. Browser RAM still matters for very large files.
 
-## Cleaning And Speed Filtering
+## Layer Filtering
 
 MapMogged computes distance with the Haversine formula and converts each movement into meters per second.
+
+Every processed layer reports the minimum and maximum valid source timestamps. The Range controls begin at those bounds and can crop processing to an inclusive subrange; the browser prevents either endpoint from leaving the available dataset range or crossing the other endpoint. Exclusions remove points in one or more inclusive blackout intervals. Both controls use the browser's local datetime and take effect when the layer is reprocessed with its refresh button.
 
 The first valid point is kept. For each later raw point, the app compares it to the previous raw point:
 
@@ -54,7 +56,7 @@ Each layer can be rendered as points or as a route:
 - Point mode rounds each cleaned latitude and longitude to the selected precision. The default precision is `4`, meaning `10^-4` degrees. Duplicate rounded coordinates are drawn once, which greatly reduces dense stationary clusters.
 - Route mode draws connected line segments through the cleaned points. The route starts a new path at each UTC year boundary, which keeps very long timelines easier to draw and inspect.
 
-Each layer has its own mode, color, width, precision, minimum speed, and maximum speed. Reprocessing a layer reruns the parser and cleaner with that layer-specific configuration; changing point precision, color, width, or route mode updates the rendered layer without merging it into other uploads.
+Each layer has its own mode, color, weight, precision, minimum speed, maximum speed, range, and exclusions. Those controls share a four-tab settings area: Visual (the default), Mechanics, Range, and Exclusions. Reprocessing a layer reruns the parser and cleaner with that layer-specific configuration; changing point precision, color, weight, or route mode updates the rendered layer without merging it into other uploads.
 
 ## Map Rendering
 
@@ -70,7 +72,7 @@ Playback can be configured by real-time multiplier or total playback duration. T
 
 Optional auto-fit follows the revealed path as it grows. Starting zoom level caps the initial close-up, Path margin sets the minimum screen-edge spacing in pixels, and Smoothing time controls a frame-rate-independent camera easing function in seconds. To compensate for easing lag, camera fitting looks ahead by the smoothing time multiplied by the playback rate while still drawing only the currently revealed route. A smoothing value of zero follows the calculated view immediately.
 
-The optional map information overlay shows covered and total distance in the abbreviated distance unit associated with the selected speed unit, the active date in the browser's local timezone with source elapsed time, and a region/country label when the point matches a configured local boundary. Its final row shows elapsed and total real playback time as `m:ss / m:ss`, followed by the playback multiplier formatted to two significant figures.
+The optional map information overlay shows covered and total distance in the distance unit associated with the selected speed unit (`miles`, `km`, `meters`, or `NM`), the active date in the browser's local timezone with source elapsed time, and a region/country label when the point matches a configured local boundary. Its final row shows elapsed and total real playback time as `m:ss / m:ss`, followed by the playback multiplier formatted to two significant figures.
 
 ## Local Region Lookup
 

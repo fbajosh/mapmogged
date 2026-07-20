@@ -1,5 +1,11 @@
 import { PlaybackFeature } from "./playback-feature.js";
 import { getFitCameraTarget } from "./playback-camera.js";
+import {
+  formatDateTimeLocal,
+  isValidDateInterval,
+  parseDateTimeLocal,
+  resolveDateBounds,
+} from "./date-filter.js";
 
 const DEFAULT_CENTER = [39.5, -98.35];
 const DEFAULT_ZOOM = 4;
@@ -48,6 +54,12 @@ const SPEED_UNITS = [
   { id: "kmh", label: "km/h", fieldLabel: "km/h", multiplier: 3.6, step: 0.1 },
   { id: "mps", label: "m/s", fieldLabel: "m/s", multiplier: 1, step: 0.1 },
   { id: "knots", label: "knots", fieldLabel: "kts", multiplier: 1.9438444924406, step: 0.1 },
+];
+const LAYER_SETTINGS_TABS = [
+  ["visual", "Visual"],
+  ["mechanics", "Mechanics"],
+  ["range", "Range"],
+  ["exclusions", "Exclusions"],
 ];
 const MAP_STYLES = [
   {
@@ -108,6 +120,11 @@ const CODICON_PATHS = {
   add: [
     {
       d: "M8 1.5C8 1.22386 7.77614 1 7.5 1C7.22386 1 7 1.22386 7 1.5V7H1.5C1.22386 7 1 7.22386 1 7.5C1 7.77614 1.22386 8 1.5 8H7V13.5C7 13.7761 7.22386 14 7.5 14C7.77614 14 8 13.7761 8 13.5V8H13.5C13.7761 8 14 7.77614 14 7.5C14 7.22386 13.7761 7 13.5 7H8V1.5Z",
+    },
+  ],
+  remove: [
+    {
+      d: "M2.5 7C2.22386 7 2 7.22386 2 7.5C2 7.77614 2.22386 8 2.5 8H13.5C13.7761 8 14 7.77614 14 7.5C14 7.22386 13.7761 7 13.5 7H2.5Z",
     },
   ],
   chevronDown: [
@@ -209,6 +226,7 @@ let uploadLayers = [];
 let processQueue = [];
 let activeProcessingLayer = null;
 let nextLayerId = 1;
+let nextDateExclusionId = 1;
 let timelineMap = null;
 let playbackFeature = null;
 let displaySpeedUnitId = "mph";
@@ -321,6 +339,12 @@ function createUploadLayer(file) {
     size: defaultSettings.size,
     color: getLayerCycleColor(id - 1),
     isCollapsed: false,
+    activeSettingsTab: "visual",
+    availableStartMs: null,
+    availableEndMs: null,
+    dateRangeStartMs: null,
+    dateRangeEndMs: null,
+    dateExclusions: [],
     status: "queued",
     progress: 0,
     stats: null,
@@ -384,6 +408,7 @@ function processNextLayer() {
       layer.progress = 100;
       layer.stats = message.stats;
       layer.cleanedPoints = message.points;
+      initializeLayerDateBounds(layer, message.stats, message.points);
       layer.worker = null;
       worker.terminate();
       activeProcessingLayer = null;
@@ -417,6 +442,9 @@ function processNextLayer() {
       fileType: layer.fileType,
       minSpeed: layer.minSpeed,
       maxSpeed: layer.maxSpeed,
+      dateRangeStartMs: layer.dateRangeStartMs,
+      dateRangeEndMs: layer.dateRangeEndMs,
+      dateExclusions: layer.dateExclusions.map(({ startMs, endMs }) => ({ startMs, endMs })),
     },
   });
 }
@@ -653,10 +681,7 @@ function renderSettingsControls(container, { modeName, values, onChange }) {
       ["route", "Route"],
     ], (value) => onChange("mode", value)),
     createColorControl("Color", values.color, (value) => onChange("color", value), "layer-span-3"),
-    createNumberControl("Width", values.size, 1, 12, 0.5, (value) => onChange("size", value), "layer-span-3"),
-    createNumberControl("Precision", values.precision, 1, 7, 1, (value) => onChange("precision", value), "layer-span-4"),
-    createSpeedControl("Min Speed", values.minSpeed, 0, 1000, (value) => onChange("minSpeed", value), "layer-span-4", "min"),
-    createSpeedControl("Max Speed", values.maxSpeed, 1, 5000, (value) => onChange("maxSpeed", value), "layer-span-4", "max"),
+    createNumberControl("Weight", values.size, 1, 12, 0.5, (value) => onChange("size", value), "layer-span-3"),
   );
 }
 
@@ -715,8 +740,79 @@ function createLayerCard(layer) {
     return card;
   }
 
+  card.append(createLayerSettingsTabs(layer));
+  return card;
+}
+
+function createLayerSettingsTabs(layer) {
+  if (!LAYER_SETTINGS_TABS.some(([id]) => id === layer.activeSettingsTab)) {
+    layer.activeSettingsTab = "visual";
+  }
+
+  const settings = document.createElement("div");
+  settings.className = "layer-settings";
+  const tabList = document.createElement("div");
+  tabList.className = "layer-settings-tabs";
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", `${layer.name} settings`);
+  const panelId = `layer-settings-panel-${layer.id}`;
+
+  for (const [tabId, label] of LAYER_SETTINGS_TABS) {
+    const isActive = tabId === layer.activeSettingsTab;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = `layer-settings-tab-${layer.id}-${tabId}`;
+    button.className = "layer-settings-tab";
+    button.dataset.layerSettingsTab = tabId;
+    button.textContent = label;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", String(isActive));
+    button.setAttribute("aria-controls", panelId);
+    button.tabIndex = isActive ? 0 : -1;
+    button.addEventListener("click", () => activateLayerSettingsTab(layer, tabId));
+    button.addEventListener("keydown", (event) => handleLayerSettingsTabKeydown(event, layer, tabId));
+    tabList.append(button);
+  }
+
+  const panel = document.createElement("div");
+  panel.id = panelId;
+  panel.className = "layer-settings-panel";
+  panel.setAttribute("role", "tabpanel");
+  panel.setAttribute("aria-labelledby", `layer-settings-tab-${layer.id}-${layer.activeSettingsTab}`);
+  panel.append(createLayerSettingsContent(layer));
+  settings.append(tabList, panel);
+  return settings;
+}
+
+function activateLayerSettingsTab(layer, tabId) {
+  if (!LAYER_SETTINGS_TABS.some(([id]) => id === tabId)) return;
+  layer.activeSettingsTab = tabId;
+  renderLayerList();
+  document.querySelector(`#layer-settings-tab-${layer.id}-${tabId}`)?.focus();
+}
+
+function handleLayerSettingsTabKeydown(event, layer, currentTabId) {
+  const currentIndex = LAYER_SETTINGS_TABS.findIndex(([id]) => id === currentTabId);
+  let nextIndex = null;
+  if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % LAYER_SETTINGS_TABS.length;
+  if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + LAYER_SETTINGS_TABS.length) % LAYER_SETTINGS_TABS.length;
+  if (event.key === "Home") nextIndex = 0;
+  if (event.key === "End") nextIndex = LAYER_SETTINGS_TABS.length - 1;
+  if (nextIndex === null) return;
+  event.preventDefault();
+  activateLayerSettingsTab(layer, LAYER_SETTINGS_TABS[nextIndex][0]);
+}
+
+function createLayerSettingsContent(layer) {
+  if (layer.activeSettingsTab === "mechanics") return createMechanicsSettings(layer);
+  if (layer.activeSettingsTab === "range") return createDateRangeSettings(layer);
+  if (layer.activeSettingsTab === "exclusions") return createDateExclusionsSettings(layer);
+  return createVisualSettings(layer);
+}
+
+function createVisualSettings(layer) {
   const controls = document.createElement("div");
-  controls.className = "layer-controls";
+  controls.className = "layer-controls layer-settings-grid";
   renderSettingsControls(controls, {
     modeName: `layer-mode-${layer.id}`,
     values: layer,
@@ -744,21 +840,219 @@ function createLayerCard(layer) {
         renderAllMapLayers();
         return;
       }
-
-      if (field === "precision") {
-        layer.precision = Math.round(value);
-        rebuildLayer(layer);
-        renderAllMapLayers();
-        renderLayerList();
-        return;
-      }
-
-      layer[field] = value;
     },
   });
+  return controls;
+}
 
-  card.append(controls);
-  return card;
+function createMechanicsSettings(layer) {
+  const controls = document.createElement("div");
+  controls.className = "layer-controls layer-settings-grid";
+  controls.append(
+    createNumberControl("Precision", layer.precision, 1, 7, 1, (value) => {
+      layer.precision = Math.round(value);
+      rebuildLayer(layer);
+      renderAllMapLayers();
+      renderLayerList();
+    }, "layer-span-4"),
+    createSpeedControl("Min Speed", layer.minSpeed, 0, 1000, (value) => {
+      layer.minSpeed = value;
+    }, "layer-span-4", "min"),
+    createSpeedControl("Max Speed", layer.maxSpeed, 1, 5000, (value) => {
+      layer.maxSpeed = value;
+    }, "layer-span-4", "max"),
+  );
+  return controls;
+}
+
+function createDateRangeSettings(layer) {
+  const content = document.createElement("div");
+  content.className = "layer-controls layer-settings-grid layer-date-range-controls";
+
+  if (!hasLayerDateBounds(layer)) {
+    content.append(createLayerSettingsMessage("Date bounds will be available after processing."));
+  } else {
+    content.append(
+      createDateTimeControl(
+        "Starting datetime",
+        layer.dateRangeStartMs,
+        layer.availableStartMs,
+        layer.dateRangeEndMs,
+        (value) => updateLayerDateRange(layer, "dateRangeStartMs", value),
+        "layer-span-6",
+      ),
+      createDateTimeControl(
+        "Ending datetime",
+        layer.dateRangeEndMs,
+        layer.dateRangeStartMs,
+        layer.availableEndMs,
+        (value) => updateLayerDateRange(layer, "dateRangeEndMs", value),
+        "layer-span-6",
+      ),
+    );
+  }
+  return content;
+}
+
+function createDateExclusionsSettings(layer) {
+  const content = document.createElement("div");
+  content.className = "layer-exclusions-settings";
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "date-exclusion-toolbar";
+  const addButton = createIconButton("add", "Add date exclusion");
+  addButton.classList.add("date-exclusion-add");
+  const addLabel = document.createElement("span");
+  addLabel.textContent = "Add exclusion";
+  addButton.append(addLabel);
+  addButton.disabled = !hasLayerDateBounds(layer);
+  addButton.addEventListener("click", () => addDateExclusion(layer));
+  toolbar.append(addButton);
+  content.append(toolbar);
+
+  if (!hasLayerDateBounds(layer)) {
+    content.append(createLayerSettingsMessage("Date bounds will be available after processing."));
+  } else if (!layer.dateExclusions.length) {
+    content.append(createLayerSettingsMessage("No excluded time periods."));
+  } else {
+    const list = document.createElement("div");
+    list.className = "date-exclusion-list";
+
+    for (const [index, exclusion] of layer.dateExclusions.entries()) {
+      const row = document.createElement("div");
+      row.className = "date-exclusion-row";
+      row.append(
+        createDateTimeControl(
+          "Start",
+          exclusion.startMs,
+          layer.availableStartMs,
+          exclusion.endMs,
+          (value) => updateDateExclusion(layer, exclusion.id, "startMs", value),
+          "",
+          { hideLabel: index > 0 },
+        ),
+        createDateTimeControl(
+          "End",
+          exclusion.endMs,
+          exclusion.startMs,
+          layer.availableEndMs,
+          (value) => updateDateExclusion(layer, exclusion.id, "endMs", value),
+          "",
+          { hideLabel: index > 0 },
+        ),
+      );
+
+      const removeButton = createIconButton("remove", "Remove date exclusion");
+      removeButton.classList.add("date-exclusion-remove");
+      removeButton.addEventListener("click", () => removeDateExclusion(layer, exclusion.id));
+      row.append(removeButton);
+      list.append(row);
+    }
+
+    content.append(list);
+  }
+  return content;
+}
+
+function createLayerSettingsMessage(message) {
+  const text = document.createElement("p");
+  text.className = "layer-settings-message";
+  text.textContent = message;
+  return text;
+}
+
+function createDateTimeControl(label, valueMs, minMs, maxMs, onChange, className = "", options = {}) {
+  const wrapper = document.createElement("label");
+  wrapper.className = ["date-time-control", className].filter(Boolean).join(" ");
+  const text = document.createElement("span");
+  text.textContent = label;
+  const input = document.createElement("input");
+  input.type = "datetime-local";
+  input.step = "0.001";
+  input.value = formatDateTimeLocal(valueMs);
+  input.min = formatDateTimeLocal(minMs);
+  input.max = formatDateTimeLocal(maxMs);
+  input.setAttribute("aria-label", label);
+  input.addEventListener("change", () => {
+    const next = parseDateTimeLocal(input.value);
+    if (Number.isFinite(next) && onChange(next)) return;
+    input.value = formatDateTimeLocal(valueMs);
+    input.setCustomValidity("Choose an ordered datetime within the available dataset range.");
+    input.reportValidity();
+    input.setCustomValidity("");
+  });
+  if (!options.hideLabel) wrapper.append(text);
+  wrapper.append(input);
+  return wrapper;
+}
+
+function initializeLayerDateBounds(layer, stats, points) {
+  const bounds = resolveDateBounds(stats, points);
+  if (!bounds) {
+    layer.availableStartMs = null;
+    layer.availableEndMs = null;
+    layer.dateRangeStartMs = null;
+    layer.dateRangeEndMs = null;
+    layer.dateExclusions = [];
+    return;
+  }
+
+  const minimum = bounds.startMs;
+  const maximum = bounds.endMs;
+  layer.availableStartMs = minimum;
+  layer.availableEndMs = maximum;
+  if (!isValidDateInterval(layer.dateRangeStartMs, layer.dateRangeEndMs, minimum, maximum)) {
+    layer.dateRangeStartMs = minimum;
+    layer.dateRangeEndMs = maximum;
+  }
+  layer.dateExclusions = layer.dateExclusions.filter((interval) =>
+    isValidDateInterval(interval.startMs, interval.endMs, minimum, maximum));
+}
+
+function hasLayerDateBounds(layer) {
+  return isValidDateInterval(
+    layer.dateRangeStartMs,
+    layer.dateRangeEndMs,
+    layer.availableStartMs,
+    layer.availableEndMs,
+  );
+}
+
+function updateLayerDateRange(layer, field, value) {
+  const startMs = field === "dateRangeStartMs" ? value : layer.dateRangeStartMs;
+  const endMs = field === "dateRangeEndMs" ? value : layer.dateRangeEndMs;
+  if (!isValidDateInterval(startMs, endMs, layer.availableStartMs, layer.availableEndMs)) return false;
+  layer[field] = value;
+  renderLayerList();
+  return true;
+}
+
+function addDateExclusion(layer) {
+  if (!hasLayerDateBounds(layer)) return;
+  const previousEndMs = layer.dateExclusions.at(-1)?.endMs;
+  const startMs = Number.isFinite(previousEndMs)
+    ? Math.min(previousEndMs + 1000, layer.dateRangeEndMs)
+    : layer.dateRangeStartMs;
+  const endMs = Math.min(startMs + 24 * 60 * 60 * 1000, layer.dateRangeEndMs);
+  layer.dateExclusions.push({ id: nextDateExclusionId++, startMs, endMs });
+  layer.activeSettingsTab = "exclusions";
+  renderLayerList();
+}
+
+function updateDateExclusion(layer, id, field, value) {
+  const exclusion = layer.dateExclusions.find((candidate) => candidate.id === id);
+  if (!exclusion) return false;
+  const startMs = field === "startMs" ? value : exclusion.startMs;
+  const endMs = field === "endMs" ? value : exclusion.endMs;
+  if (!isValidDateInterval(startMs, endMs, layer.availableStartMs, layer.availableEndMs)) return false;
+  exclusion[field] = value;
+  renderLayerList();
+  return true;
+}
+
+function removeDateExclusion(layer, id) {
+  layer.dateExclusions = layer.dateExclusions.filter((exclusion) => exclusion.id !== id);
+  renderLayerList();
 }
 
 function createSegmentedControl(name, label, value, options, onChange) {
@@ -1095,8 +1389,12 @@ function emptyStats() {
     rawCount: 0,
     skippedSlow: 0,
     skippedFast: 0,
+    skippedDateRange: 0,
+    skippedDateExclusion: 0,
     skippedInvalid: 0,
     outOfOrderCount: 0,
+    minTimeMs: null,
+    maxTimeMs: null,
   };
 }
 

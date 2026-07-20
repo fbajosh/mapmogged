@@ -109,13 +109,22 @@ test("rejects sample counts above the cap", () => {
 });
 
 test("formats distance, elapsed boundaries, and local timestamps", () => {
-  assert.deepEqual(formatDistance(1609.344, "mph"), { value: 1, unit: "mi", text: "1" });
+  assert.deepEqual(formatDistance(1609.344, "mph"), { value: 1, unit: "miles", text: "1" });
   assert.equal(formatDistance(1000, "kmh").unit, "km");
+  assert.equal(formatDistance(1, "mps").unit, "meters");
   assert.equal(formatDistance(1852, "knots").text, "1");
   assert.equal(formatDistance(1499, "kmh").text, "1");
   assert.equal(formatElapsed(59 * 60_000).unit, "minutes");
   assert.equal(formatElapsed(60 * 60_000).unit, "hours");
-  assert.equal(formatElapsed(24 * 60 * 60_000).unit, "days");
+  assert.equal(formatElapsed(24 * 60 * 60_000).unit, "hours");
+  assert.deepEqual(
+    { text: formatElapsed(36 * 60 * 60_000).text, unit: formatElapsed(36 * 60 * 60_000).unit },
+    { text: "36", unit: "hours" },
+  );
+  assert.deepEqual(
+    { text: formatElapsed((36 * 60 + 1) * 60_000).text, unit: formatElapsed((36 * 60 + 1) * 60_000).unit },
+    { text: "2", unit: "days" },
+  );
   assert.equal(formatElapsed(33.3 * 24 * 60 * 60_000).text, "33");
   assert.equal(formatElapsed(365 * 24 * 60 * 60_000).unit, "years");
   const localDate = new Date(2026, 2, 7, 15, 0);
