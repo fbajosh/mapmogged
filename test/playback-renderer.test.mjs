@@ -28,6 +28,41 @@ test("draws preview, completed route, and marker in flat and globe modes", () =>
   assert.ok(operations.includes("arc"));
 });
 
+test("supports hidden, light, full, and custom path previews", () => {
+  const sequence = buildPlaybackSequence(
+    [{
+      id: 1,
+      status: "ready",
+      color: "#2563eb",
+      size: 2,
+      cleanedPoints: [[0, 0, 0], [1, 1, 1000]],
+    }],
+    1000,
+  );
+  const layer = new PlaybackCanvasLayer(sequence);
+
+  layer.setPreviewAlpha(0);
+  assert.equal(layer.previewAlpha, 0);
+  layer.setPreviewAlpha(0.3);
+  assert.equal(layer.previewAlpha, 0.3);
+  layer.setPreviewAlpha(0.9);
+  assert.equal(layer.previewAlpha, 0.9);
+
+  layer.setCustomPreview("#ff00ff", 0.42);
+  assert.equal(layer.previewColor, "#ff00ff");
+  assert.equal(layer.previewAlpha, 0.42);
+
+  const strokeStyles = [];
+  layer.setSnapshot(samplePlaybackAt(sequence, 500));
+  layer.draw(makeContext([], [], [], strokeStyles), makeMap());
+  assert.ok(strokeStyles.includes("#ff00ff"));
+  assert.ok(strokeStyles.includes("#2563eb"));
+
+  layer.setPreviewAlpha(0.3);
+  assert.equal(layer.previewColor, null);
+  assert.equal(layer.previewAlpha, 0.3);
+});
+
 test("colors a sparse playback route and marker by elapsed track time", () => {
   const sequence = buildPlaybackSequence(
     [{

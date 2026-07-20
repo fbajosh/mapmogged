@@ -12,7 +12,8 @@ const MAX_DRAWN_SAMPLES_PER_PASS = 50_000;
 class PlaybackCanvasLayer {
   constructor(sequence, options = {}) {
     this.sequence = sequence;
-    this.previewAlpha = options.previewAlpha ?? 0.3;
+    this.previewAlpha = 0.3;
+    this.previewColor = null;
     this.pathMode = options.pathMode === "tracking-only" ? "tracking-only" : "resampled";
     this.snapshot = null;
     this.pointCount = sequence?.sampleCount ?? 0;
@@ -21,6 +22,11 @@ class PlaybackCanvasLayer {
         ? createColorRamp(segment.gradientStartColor, segment.gradientEndColor)
         : null,
     );
+    if (options.previewColor) {
+      this.setCustomPreview(options.previewColor, options.previewAlpha ?? 0.3);
+    } else {
+      this.setPreviewAlpha(options.previewAlpha ?? 0.3);
+    }
   }
 
   setSnapshot(snapshot) {
@@ -28,7 +34,17 @@ class PlaybackCanvasLayer {
   }
 
   setPreviewAlpha(alpha) {
-    this.previewAlpha = alpha === 0 ? 0 : 0.3;
+    const value = Number(alpha);
+    this.previewColor = null;
+    this.previewAlpha = value >= 0.9 ? 0.9 : value > 0 ? 0.3 : 0;
+  }
+
+  setCustomPreview(color, alpha) {
+    const value = Number(alpha);
+    this.previewColor = String(color || "#2563eb");
+    this.previewAlpha = Number.isFinite(value)
+      ? Math.max(0, Math.min(1, value))
+      : 0.3;
   }
 
   setPathMode(pathMode) {
@@ -41,7 +57,17 @@ class PlaybackCanvasLayer {
       for (let index = 0; index < this.sequence.segments.length; index += 1) {
         const segment = this.sequence.segments[index];
         const path = getSegmentPath(segment, this.pathMode);
-        drawFlatSegment(ctx, map, segment, path, path.sampleCount - 1, this.previewAlpha, 0, this.colorRamps[index]);
+        drawFlatSegment(
+          ctx,
+          map,
+          segment,
+          path,
+          path.sampleCount - 1,
+          this.previewAlpha,
+          0,
+          this.previewColor ? null : this.colorRamps[index],
+          this.previewColor,
+        );
       }
     }
 
@@ -74,7 +100,8 @@ class PlaybackCanvasLayer {
           path.sampleCount - 1,
           this.previewAlpha,
           0,
-          this.colorRamps[index],
+          this.previewColor ? null : this.colorRamps[index],
+          this.previewColor,
         );
       }
     }
@@ -104,9 +131,19 @@ class PlaybackCanvasLayer {
   }
 }
 
-function drawFlatSegment(ctx, map, segment, path, endIndex, alpha, edgeRatio = 0, colorRamp = null) {
+function drawFlatSegment(
+  ctx,
+  map,
+  segment,
+  path,
+  endIndex,
+  alpha,
+  edgeRatio = 0,
+  colorRamp = null,
+  colorOverride = null,
+) {
   if (endIndex < 1 && edgeRatio <= 0) return;
-  setupRouteContext(ctx, segment, alpha);
+  setupRouteContext(ctx, segment, alpha, colorOverride);
   if (colorRamp) {
     drawGradientSegment(
       ctx,
@@ -144,9 +181,10 @@ function drawGlobeSegment(
   alpha,
   edgeRatio = 0,
   colorRamp = null,
+  colorOverride = null,
 ) {
   if (endIndex < 1 && edgeRatio <= 0) return;
-  setupRouteContext(ctx, segment, alpha);
+  setupRouteContext(ctx, segment, alpha, colorOverride);
   if (colorRamp) {
     drawGradientSegment(
       ctx,
@@ -292,11 +330,11 @@ function drawMarker(ctx, point, segment, snapshot, colorRamp) {
   ctx.restore();
 }
 
-function setupRouteContext(ctx, segment, alpha) {
+function setupRouteContext(ctx, segment, alpha, colorOverride = null) {
   ctx.lineWidth = Math.max(1, Number(segment.width) || 2);
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.strokeStyle = segment.color || "#2563eb";
+  ctx.strokeStyle = colorOverride || segment.color || "#2563eb";
   ctx.globalAlpha = alpha;
 }
 

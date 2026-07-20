@@ -18,6 +18,7 @@ import {
   getPredictedSourceElapsedMs,
   smoothCamera,
 } from "./playback-camera.js";
+import { createInlineColorPicker } from "./color-picker-control.js";
 
 const INFO_UPDATE_INTERVAL_MS = 100;
 const PREPARE_DEBOUNCE_MS = 180;
@@ -54,7 +55,9 @@ class PlaybackFeature {
     this.lastAutoFitAt = null;
     this.currentSnapshot = null;
     this.error = "";
+    this.customPreviewColor = "#2563eb";
 
+    this.setupPreviewColorPicker();
     this.setupIcons();
     this.bindEvents();
     this.syncRateFields();
@@ -68,6 +71,15 @@ class PlaybackFeature {
     this.elements.playButton.replaceChildren(this.createIcon("play"));
     this.elements.pauseButton.replaceChildren(this.createIcon("debugPause"));
     this.elements.resetButton.replaceChildren(this.createIcon("debugRestart"));
+  }
+
+  setupPreviewColorPicker() {
+    this.previewColorPicker = createInlineColorPicker(this.customPreviewColor, (color) => {
+      this.customPreviewColor = color;
+      this.applyPreviewStyle();
+    });
+    this.elements.previewCustomColor.replaceChildren(this.previewColorPicker.element);
+    this.syncPreviewControls();
   }
 
   bindEvents() {
@@ -122,11 +134,15 @@ class PlaybackFeature {
     }
     for (const input of this.elements.previewInputs) {
       input.addEventListener("change", () => {
-        if (!input.checked || !this.playbackLayer) return;
-        this.playbackLayer.setPreviewAlpha(Number(input.value));
-        this.map.renderOverlay();
+        if (!input.checked) return;
+        this.syncPreviewControls();
+        this.applyPreviewStyle();
       });
     }
+    this.elements.previewTransparency.addEventListener("input", () => {
+      this.syncPreviewControls();
+      this.applyPreviewStyle();
+    });
     for (const input of this.elements.autoFitInputs) {
       input.addEventListener("change", () => this.handleAutoFitSettingsChange({
         resetBounds: true,
@@ -437,8 +453,10 @@ class PlaybackFeature {
         return;
       }
 
+      const previewStyle = this.getPreviewStyle();
       this.playbackLayer = new PlaybackCanvasLayer(message.sequence, {
-        previewAlpha: this.getPreviewAlpha(),
+        previewAlpha: previewStyle.alpha,
+        previewColor: previewStyle.color,
         pathMode: this.getResampleMode(),
       });
       this.controller.setSequence(message.sequence);
@@ -545,8 +563,28 @@ class PlaybackFeature {
     return durationValueToMs(this.elements.resampleValue.value, unit);
   }
 
-  getPreviewAlpha() {
-    return Number(this.elements.previewInputs.find((input) => input.checked)?.value ?? 0.3);
+  getPreviewStyle() {
+    const mode = this.elements.previewInputs.find((input) => input.checked)?.value ?? "0.3";
+    if (mode === "custom") {
+      const transparency = clamp(Number(this.elements.previewTransparency.value) || 0, 0, 100);
+      return { alpha: 1 - transparency / 100, color: this.customPreviewColor };
+    }
+    return { alpha: Number(mode), color: null };
+  }
+
+  syncPreviewControls() {
+    const isCustom = this.elements.previewInputs.find((input) => input.checked)?.value === "custom";
+    this.elements.previewCustom.hidden = !isCustom;
+    const transparency = clamp(Number(this.elements.previewTransparency.value) || 0, 0, 100);
+    this.elements.previewTransparencyValue.value = `${Math.round(transparency)}%`;
+  }
+
+  applyPreviewStyle() {
+    if (!this.playbackLayer) return;
+    const style = this.getPreviewStyle();
+    if (style.color) this.playbackLayer.setCustomPreview(style.color, style.alpha);
+    else this.playbackLayer.setPreviewAlpha(style.alpha);
+    this.map.renderOverlay();
   }
 
   getResampleMode() {
@@ -692,6 +730,10 @@ function getElements() {
     resampleUnitInputs: Array.from(document.querySelectorAll('input[name="playbackResampleUnit"]')),
     resampleModeInputs: Array.from(document.querySelectorAll('input[name="playbackResampleMode"]')),
     previewInputs: Array.from(document.querySelectorAll('input[name="playbackPreview"]')),
+    previewCustom: document.querySelector("#playbackPreviewCustom"),
+    previewCustomColor: document.querySelector("#playbackPreviewCustomColor"),
+    previewTransparency: document.querySelector("#playbackPreviewTransparency"),
+    previewTransparencyValue: document.querySelector("#playbackPreviewTransparencyValue"),
     autoFitInputs: Array.from(document.querySelectorAll('input[name="playbackAutoFit"]')),
     startingZoom: document.querySelector("#playbackStartingZoom"),
     pathMargin: document.querySelector("#playbackPathMargin"),
@@ -725,6 +767,10 @@ function formatInputNumber(value) {
   if (!Number.isFinite(value)) return "";
   if (value >= 1000) return value.toFixed(2).replace(/\.00$/, "");
   return value.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 export { PlaybackFeature };
