@@ -28,6 +28,44 @@ test("draws preview, completed route, and marker in flat and globe modes", () =>
   assert.ok(operations.includes("arc"));
 });
 
+test("draws a filled arrow node rotated with the projected route", () => {
+  const sequence = buildPlaybackSequence(
+    [{
+      id: 1,
+      status: "ready",
+      color: "#2563eb",
+      size: 2,
+      cleanedPoints: [[0, 0, 0], [0.01, 0.01, 1000]],
+    }],
+    1000,
+  );
+  const layer = new PlaybackCanvasLayer(sequence, { previewAlpha: 0, nodeMode: "arrow" });
+  layer.setSnapshot(samplePlaybackAt(sequence, 500));
+  const operations = [];
+  const rotations = [];
+  const strokeStyles = [];
+  const fillStyles = [];
+  const context = makeContext(operations, [], [], strokeStyles, fillStyles, rotations);
+  const map = makeMap();
+
+  layer.draw(context, map);
+  layer.drawGlobe(context, map, {});
+
+  assert.equal(operations.includes("arc"), false);
+  assert.equal(operations.filter((operation) => operation === "closePath").length, 2);
+  assert.equal(rotations.length, 2);
+  assert.ok(rotations.every((angle) => Math.abs(angle - Math.PI / 4) < 1e-6));
+  assert.ok(fillStyles.includes("#2563eb"));
+  assert.ok(strokeStyles.includes("rgba(255, 255, 255, 0.95)"));
+
+  layer.setNodeMode("circle");
+  layer.setNodeSize(18);
+  const radii = [];
+  layer.draw(makeContext(operations, [], [], [], [], [], radii), map);
+  assert.ok(operations.includes("arc"));
+  assert.deepEqual(radii, [9]);
+});
+
 test("supports hidden, light, full, and custom path previews", () => {
   const sequence = buildPlaybackSequence(
     [{
@@ -186,9 +224,18 @@ test("keeps a partially revealed great-circle path connected to its marker", () 
   assert.ok(pointsAlmostEqual(lineHead, markers[0]));
 });
 
-function makeContext(operations, markers = [], curves = [], strokeStyles = [], fillStyles = []) {
+function makeContext(
+  operations,
+  markers = [],
+  curves = [],
+  strokeStyles = [],
+  fillStyles = [],
+  rotations = [],
+  radii = [],
+) {
   return {
     beginPath: () => operations.push("beginPath"),
+    closePath: () => operations.push("closePath"),
     moveTo: () => operations.push("moveTo"),
     lineTo: () => operations.push("lineTo"),
     bezierCurveTo: (control1X, control1Y, control2X, control2Y, endX, endY) => {
@@ -200,13 +247,17 @@ function makeContext(operations, markers = [], curves = [], strokeStyles = [], f
       ]);
     },
     stroke: () => operations.push("stroke"),
-    arc: (x, y) => {
+    arc: (x, y, radius) => {
       operations.push("arc");
       markers.push([y, x]);
+      radii.push(radius);
     },
     fill: () => operations.push("fill"),
     save: () => operations.push("save"),
     restore: () => operations.push("restore"),
+    translate: () => operations.push("translate"),
+    rotate: (angle) => rotations.push(angle),
+    scale: () => operations.push("scale"),
     set lineWidth(value) {},
     set lineJoin(value) {},
     set lineCap(value) {},

@@ -1,5 +1,5 @@
 import { SAMPLE_STRIDE, samplePathAtDistance } from "./playback-model.js";
-import { createRouteEdge, getRouteEdgeRange } from "./route-geometry.js";
+import { createRouteEdge, getRouteEdgeRange, interpolateRouteEdge } from "./route-geometry.js";
 import { drawRouteEdgeFlat, drawRouteEdgeGlobe } from "./route-canvas.js";
 import {
   createColorRamp,
@@ -8,6 +8,8 @@ import {
 } from "./time-gradient.js";
 
 const MAX_DRAWN_SAMPLES_PER_PASS = 50_000;
+const MARKER_TANGENT_SAMPLE_RATIO = 0.01;
+const DEFAULT_NODE_SIZE_PX = 8;
 
 class PlaybackCanvasLayer {
   constructor(sequence, options = {}) {
@@ -15,6 +17,8 @@ class PlaybackCanvasLayer {
     this.previewAlpha = 0.3;
     this.previewColor = null;
     this.pathMode = options.pathMode === "tracking-only" ? "tracking-only" : "resampled";
+    this.nodeMode = options.nodeMode === "arrow" ? "arrow" : "circle";
+    this.nodeSize = normalizeNodeSize(options.nodeSize);
     this.snapshot = null;
     this.pointCount = sequence?.sampleCount ?? 0;
     this.colorRamps = (sequence?.segments ?? []).map((segment) =>
@@ -51,6 +55,14 @@ class PlaybackCanvasLayer {
     this.pathMode = pathMode === "tracking-only" ? "tracking-only" : "resampled";
   }
 
+  setNodeMode(nodeMode) {
+    this.nodeMode = nodeMode === "arrow" ? "arrow" : "circle";
+  }
+
+  setNodeSize(nodeSize) {
+    this.nodeSize = normalizeNodeSize(nodeSize);
+  }
+
   draw(ctx, map) {
     if (!this.snapshot || !this.sequence?.segments?.length) return;
     if (this.previewAlpha > 0) {
@@ -81,7 +93,16 @@ class PlaybackCanvasLayer {
     const revealed = getRevealedPath(active, this.snapshot, this.pathMode);
     const activeRamp = this.colorRamps[this.snapshot.segmentIndex];
     drawFlatSegment(ctx, map, active, revealed, revealed.endIndex, 0.9, revealed.edgeRatio, activeRamp);
-    drawFlatMarker(ctx, map, active, this.snapshot, activeRamp);
+    drawFlatMarker(
+      ctx,
+      map,
+      active,
+      this.snapshot,
+      activeRamp,
+      this.nodeMode,
+      this.nodeSize,
+      revealed,
+    );
     ctx.globalAlpha = 1;
   }
 
@@ -126,7 +147,17 @@ class PlaybackCanvasLayer {
       revealed.edgeRatio,
       activeRamp,
     );
-    drawGlobeMarker(ctx, map, geometry, active, this.snapshot, activeRamp);
+    drawGlobeMarker(
+      ctx,
+      map,
+      geometry,
+      active,
+      this.snapshot,
+      activeRamp,
+      this.nodeMode,
+      this.nodeSize,
+      revealed,
+    );
     ctx.globalAlpha = 1;
   }
 }
@@ -304,30 +335,126 @@ function drawCompleteEdges(path, endIndex, step, drawEdge) {
   return drawing;
 }
 
-function drawFlatMarker(ctx, map, segment, snapshot, colorRamp) {
+function drawFlatMarker(ctx, map, segment, snapshot, colorRamp, nodeMode, nodeSize, path) {
   const point = map.latLonToContainerPoint(snapshot.lat, snapshot.lon);
-  drawMarker(ctx, point, segment, snapshot, colorRamp);
+  const heading = nodeMode === "arrow"
+    ? getMarkerHeading(path, (candidate) => map.latLonToContainerPoint(candidate.lat, candidate.lon))
+    : 0;
+  drawMarker(ctx, point, segment, snapshot, colorRamp, nodeMode, nodeSize, heading);
 }
 
-function drawGlobeMarker(ctx, map, geometry, segment, snapshot, colorRamp) {
+function drawGlobeMarker(ctx, map, geometry, segment, snapshot, colorRamp, nodeMode, nodeSize, path) {
   const point = map.latLonToGlobePoint(snapshot.lat, snapshot.lon, geometry);
-  if (point.visible) drawMarker(ctx, point, segment, snapshot, colorRamp);
+  if (!point.visible) return;
+  const heading = nodeMode === "arrow"
+    ? getMarkerHeading(
+      path,
+      (candidate) => map.latLonToGlobePoint(candidate.lat, candidate.lon, geometry),
+    )
+    : 0;
+  drawMarker(ctx, point, segment, snapshot, colorRamp, nodeMode, nodeSize, heading);
 }
 
-function drawMarker(ctx, point, segment, snapshot, colorRamp) {
-  const radius = Math.max(4, Number(segment.width) + 2);
+function drawMarker(ctx, point, segment, snapshot, colorRamp, nodeMode, nodeSize, heading) {
+  const radius = nodeSize / 2;
   ctx.save();
   ctx.globalAlpha = 1;
-  ctx.beginPath();
-  ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
   ctx.fillStyle = colorRamp
     ? getTimeGradientColor(colorRamp, snapshot.localElapsedMs, 0, segment.durationMs)
     : segment.color;
-  ctx.fill();
   ctx.lineWidth = 2;
   ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-  ctx.stroke();
+  if (nodeMode === "arrow") drawSendArrow(ctx, point, radius, heading);
+  else {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
   ctx.restore();
+}
+
+function drawSendArrow(ctx, point, radius, heading) {
+  const scale = radius / 7;
+  ctx.translate(point.x, point.y);
+  ctx.rotate(heading);
+  ctx.scale(scale, scale);
+  ctx.translate(-8, -8);
+  ctx.beginPath();
+  // Filled outer silhouette from VS Code Codicon's 16px `send` icon.
+  ctx.moveTo(1.17683, 1.11898);
+  ctx.bezierCurveTo(1.32953, 0.989634, 1.54464, 0.963786, 1.72363, 1.05328);
+  ctx.lineTo(14.7236, 7.55328);
+  ctx.bezierCurveTo(14.893, 7.63797, 15, 7.8111, 15, 8.00049);
+  ctx.bezierCurveTo(15, 8.18987, 14.893, 8.36301, 14.7236, 8.4477);
+  ctx.lineTo(1.72363, 14.9477);
+  ctx.bezierCurveTo(1.54464, 15.0372, 1.32953, 15.0113, 1.17683, 14.882);
+  ctx.bezierCurveTo(1.02414, 14.7526, 0.96328, 14.5447, 1.02213, 14.3534);
+  ctx.lineTo(2.97688, 8.00049);
+  ctx.lineTo(1.02213, 1.64754);
+  ctx.bezierCurveTo(0.96328, 1.45627, 1.02414, 1.24833, 1.17683, 1.11898);
+  ctx.closePath();
+  ctx.lineWidth = 2 / scale;
+  ctx.lineJoin = "round";
+  ctx.fill();
+  ctx.stroke();
+}
+
+function getMarkerHeading(path, projectPoint) {
+  const edgeCount = Math.max(0, Number(path?.sampleCount) - 1);
+  if (!edgeCount) return 0;
+  let edgeIndex = Math.max(0, Math.min(edgeCount - 1, Number(path.endIndex) || 0));
+  let ratio = Math.max(0, Math.min(1, Number(path.edgeRatio) || 0));
+  if (Number(path.endIndex) >= edgeCount) {
+    edgeIndex = edgeCount - 1;
+    ratio = 1;
+  }
+
+  const localHeading = getEdgeHeading(
+    path,
+    edgeIndex,
+    Math.max(0, ratio - MARKER_TANGENT_SAMPLE_RATIO),
+    Math.min(1, ratio + MARKER_TANGENT_SAMPLE_RATIO),
+    projectPoint,
+  );
+  if (localHeading !== null) return localHeading;
+
+  for (let offset = 1; offset < edgeCount; offset += 1) {
+    const previousIndex = edgeIndex - offset;
+    if (previousIndex >= 0) {
+      const previousHeading = getEdgeHeading(path, previousIndex, 0, 1, projectPoint);
+      if (previousHeading !== null) return previousHeading;
+    }
+    const nextIndex = edgeIndex + offset;
+    if (nextIndex < edgeCount) {
+      const nextHeading = getEdgeHeading(path, nextIndex, 0, 1, projectPoint);
+      if (nextHeading !== null) return nextHeading;
+    }
+  }
+  return 0;
+}
+
+function getEdgeHeading(path, edgeIndex, startRatio, endRatio, projectPoint) {
+  if (endRatio <= startRatio) {
+    if (startRatio >= 1) startRatio = Math.max(0, 1 - MARKER_TANGENT_SAMPLE_RATIO);
+    else endRatio = Math.min(1, startRatio + MARKER_TANGENT_SAMPLE_RATIO);
+  }
+  const edge = getPackedRouteEdge(path, edgeIndex);
+  const start = projectPoint(interpolateRouteEdge(edge, startRatio));
+  const end = projectPoint(interpolateRouteEdge(edge, endRatio));
+  const deltaX = Number(end?.x) - Number(start?.x);
+  const deltaY = Number(end?.y) - Number(start?.y);
+  if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY) || Math.hypot(deltaX, deltaY) < 1e-6) {
+    return null;
+  }
+  return Math.atan2(deltaY, deltaX);
+}
+
+function normalizeNodeSize(nodeSize) {
+  const size = Number(nodeSize);
+  return Number.isFinite(size)
+    ? Math.max(4, Math.min(64, size))
+    : DEFAULT_NODE_SIZE_PX;
 }
 
 function setupRouteContext(ctx, segment, alpha, colorOverride = null) {

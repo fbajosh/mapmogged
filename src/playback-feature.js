@@ -24,6 +24,7 @@ const INFO_UPDATE_INTERVAL_MS = 100;
 const PREPARE_DEBOUNCE_MS = 180;
 const PLAYBACK_START_DELAY_MS = 500;
 const PANEL_REVEAL_DELAY_MS = 2000;
+const DEFAULT_NODE_SIZE_PX = 8;
 
 class PlaybackFeature {
   constructor(options) {
@@ -142,6 +143,25 @@ class PlaybackFeature {
     this.elements.previewTransparency.addEventListener("input", () => {
       this.syncPreviewControls();
       this.applyPreviewStyle();
+    });
+    for (const input of this.elements.nodeInputs) {
+      input.addEventListener("change", () => {
+        if (!input.checked || !this.playbackLayer) return;
+        this.playbackLayer.setNodeMode(this.getNodeMode());
+        this.map.renderOverlay();
+      });
+    }
+    this.elements.nodeSize.addEventListener("input", () => {
+      if (!this.playbackLayer) return;
+      this.playbackLayer.setNodeSize(this.getNodeSize());
+      this.map.renderOverlay();
+    });
+    this.elements.nodeSize.addEventListener("change", () => {
+      const size = this.getNodeSize();
+      this.elements.nodeSize.value = String(size);
+      if (!this.playbackLayer) return;
+      this.playbackLayer.setNodeSize(size);
+      this.map.renderOverlay();
     });
     for (const input of this.elements.autoFitInputs) {
       input.addEventListener("change", () => this.handleAutoFitSettingsChange({
@@ -458,6 +478,8 @@ class PlaybackFeature {
         previewAlpha: previewStyle.alpha,
         previewColor: previewStyle.color,
         pathMode: this.getResampleMode(),
+        nodeMode: this.getNodeMode(),
+        nodeSize: this.getNodeSize(),
       });
       this.controller.setSequence(message.sequence);
       if (this.isOpen) this.map.setLayers([this.playbackLayer]);
@@ -591,6 +613,17 @@ class PlaybackFeature {
     return this.elements.resampleModeInputs.find((input) => input.checked)?.value === "tracking-only"
       ? "tracking-only"
       : "resampled";
+  }
+
+  getNodeMode() {
+    return this.elements.nodeInputs.find((input) => input.checked)?.value === "arrow"
+      ? "arrow"
+      : "circle";
+  }
+
+  getNodeSize() {
+    const size = Number(this.elements.nodeSize.value);
+    return Number.isFinite(size) ? clamp(size, 4, 64) : DEFAULT_NODE_SIZE_PX;
   }
 
   isAutoFitEnabled() {
@@ -734,6 +767,8 @@ function getElements() {
     previewCustomColor: document.querySelector("#playbackPreviewCustomColor"),
     previewTransparency: document.querySelector("#playbackPreviewTransparency"),
     previewTransparencyValue: document.querySelector("#playbackPreviewTransparencyValue"),
+    nodeInputs: Array.from(document.querySelectorAll('input[name="playbackNode"]')),
+    nodeSize: document.querySelector("#playbackNodeSize"),
     autoFitInputs: Array.from(document.querySelectorAll('input[name="playbackAutoFit"]')),
     startingZoom: document.querySelector("#playbackStartingZoom"),
     pathMargin: document.querySelector("#playbackPathMargin"),

@@ -433,6 +433,13 @@ h1 {
   margin-top: 12px;
 }
 
+.playback-node-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+
 .playback-custom-preview {
   display: grid;
   gap: 10px;

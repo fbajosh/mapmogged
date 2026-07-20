@@ -253,6 +253,25 @@
                 </label>
               </div>
             </div>
+            <div class="playback-visualization-group playback-node-row">
+              <div class="playback-field">
+                <label>Node</label>
+                <div class="segmented-control playback-segmented" role="group" aria-label="Playback node">
+                  <label>
+                    <input type="radio" name="playbackNode" value="circle" checked />
+                    <span>Circle</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="playbackNode" value="arrow" />
+                    <span>Arrow</span>
+                  </label>
+                </div>
+              </div>
+              <div class="playback-field">
+                <label for="playbackNodeSize">Size</label>
+                <input id="playbackNodeSize" type="number" min="4" max="64" step="1" value="8" title="Node diameter in pixels" />
+              </div>
+            </div>
             <div class="playback-field playback-visualization-group">
               <label>Auto-zoom</label>
               <div class="segmented-control playback-segmented" role="group" aria-label="Auto-zoom revealed path">
